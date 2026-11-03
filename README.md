@@ -21,7 +21,7 @@ Requires Android 8.0 or newer.
 
 ## Install
 
-Download the APK and open it on your phone. In NuminOS, allow **Show over other apps**.
+Download the APK from [Releases](https://github.com/mateotomas2/numinos/releases/latest) and open it on your phone. In NuminOS, allow **Show over other apps**.
 
 If Android says this is a restricted setting, open NuminOS in App info, tap the ⋮ menu and choose **Allow restricted settings**.
 
@@ -47,6 +47,12 @@ You need JDK 17 and the Android SDK.
 ```
 
 The APK is written to `app/build/outputs/apk/debug/`.
+
+## Releases
+
+- **Pull request:** publishes a signed pre-release, replaced on every push and removed when the PR closes.
+- **Merge to `main`:** publishes the final release. Raise `versionName` in `app/build.gradle.kts` in every PR, or its build fails.
+- **Signing:** the pipeline reads the `SIGNING_KEYSTORE_B64` and `SIGNING_PASSWORD` repository secrets. Keep a backup of the key, because Android only installs updates signed with the same key.
 
 ## License
 

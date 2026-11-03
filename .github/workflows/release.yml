@@ -1,0 +1,104 @@
+name: Release
+
+# A pull request publishes one pre-release, replaced on every push and removed
+# when the PR closes. Merging to main publishes the final release.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  # Pull requests from forks get no signing key and publish nothing.
+  CAN_PUBLISH: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+jobs:
+  build:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        run: |
+          version=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          if [ -n "$PR_NUMBER" ]; then
+            echo "VERSION_SUFFIX=-pr$PR_NUMBER.$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check that this version is new
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error file=app/build.gradle.kts::v$VERSION is already released. Raise versionName."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Load the signing key
+        if: env.CAN_PUBLISH == 'true'
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$SIGNING_KEYSTORE_B64" ]; then
+            echo "::error::The SIGNING_KEYSTORE_B64 secret is missing, so this build can't be signed."
+            exit 1
+          fi
+          echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+
+      - name: Build and check
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew assembleRelease lintRelease
+
+      - name: Publish the pre-release
+        if: env.CAN_PUBLISH == 'true' && github.event_name == 'pull_request'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          apk="numinos-$VERSION$VERSION_SUFFIX.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release delete "pr-$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+          gh release create "pr-$PR_NUMBER" "$apk" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+            --target "$HEAD_SHA" \
+            --title "NuminOS $VERSION$VERSION_SUFFIX (pre-release)" \
+            --notes "Test build for #$PR_NUMBER. It's replaced on every push and removed when the PR closes."
+
+      - name: Publish the final release
+        if: github.event_name == 'push'
+        run: |
+          apk="numinos-$VERSION.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release create "v$VERSION" "$apk" --repo "$GITHUB_REPOSITORY" --latest \
+            --target "$GITHUB_SHA" \
+            --title "NuminOS $VERSION" \
+            --generate-notes
+
+  remove-prerelease:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: gh release delete "pr-$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
