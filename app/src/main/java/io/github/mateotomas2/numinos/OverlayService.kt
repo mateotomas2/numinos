@@ -78,7 +78,14 @@ class OverlayService : Service() {
                 readerOpen = true
                 removeBubble()
             }
-            ACTION_READER_CLOSED -> readerOpen = false
+            ACTION_READER_CLOSED -> {
+                readerOpen = false
+                panel?.close()
+            }
+            ACTION_READER_BACK -> {
+                readerOpen = false
+                panel?.resumeFromReader()
+            }
         }
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
@@ -295,6 +302,7 @@ class OverlayService : Service() {
         private const val ACTION_REFRESH = "refresh"
         private const val ACTION_READER_OPEN = "reader-open"
         private const val ACTION_READER_CLOSED = "reader-closed"
+        private const val ACTION_READER_BACK = "reader-back"
         @Suppress("DEPRECATION")
         private const val ACTION_SYSTEM_CLOSE = Intent.ACTION_CLOSE_SYSTEM_DIALOGS
 
@@ -314,6 +322,11 @@ class OverlayService : Service() {
                 val action = if (open) ACTION_READER_OPEN else ACTION_READER_CLOSED
                 context.startForegroundService(Intent(context, OverlayService::class.java).setAction(action))
             }
+        }
+
+        /** Back from the reader returns to the floating window as you left it. */
+        fun returnFromReader(context: Context) {
+            context.startForegroundService(Intent(context, OverlayService::class.java).setAction(ACTION_READER_BACK))
         }
 
         fun stop(context: Context) {

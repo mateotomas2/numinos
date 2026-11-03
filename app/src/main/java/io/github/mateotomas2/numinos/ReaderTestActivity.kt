@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class ReaderTestActivity : AppCompatActivity() {
     private var publication: Publication? = null
     private var navigator: EpubNavigatorFragment? = null
     private var mark: Locator? = null
+    private var returning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The book is opened again from scratch, so Android must not try to restore the reader itself.
@@ -57,7 +59,16 @@ class ReaderTestActivity : AppCompatActivity() {
         store.applyLook()
         val container = FrameLayout(this).apply { id = View.generateViewId() }
         setContentView(cardAround(container))
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = goBack()
+        })
         scope.launch { open(container.id) }
+    }
+
+    private fun goBack() {
+        returning = true
+        OverlayService.returnFromReader(this)
+        finish()
     }
 
     private fun cardAround(content: View): View {
@@ -73,7 +84,7 @@ class ReaderTestActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(6), dp(6), dp(8), dp(2))
-                addView(iconButton(R.drawable.ic_back, "Close") { finish() }, LinearLayout.LayoutParams(dp(44), dp(44)))
+                addView(iconButton(R.drawable.ic_back, "Back") { goBack() }, LinearLayout.LayoutParams(dp(44), dp(44)))
                 addView(label("Reader test", 19f, INK, serif = true), LinearLayout.LayoutParams(0, -2, 1f))
                 addView(iconButton(R.drawable.ic_mark, "Go to the marked passage", SOFT) {
                     val target = mark
@@ -126,7 +137,7 @@ class ReaderTestActivity : AppCompatActivity() {
 
     private fun fail(step: String, message: String?) {
         Toast.makeText(this, "Couldn't $step the book: $message", Toast.LENGTH_LONG).show()
-        finish()
+        goBack()
     }
 
     /** Long-pressing selects the exact words, then this menu acts on them. */
@@ -166,8 +177,8 @@ class ReaderTestActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        OverlayService.setReaderOpen(this, false)
-        // Pressing Home leaves the card, the same as the floating window.
+        // Home or tapping outside closes everything, while Back has already asked to return.
+        if (!returning) OverlayService.setReaderOpen(this, false)
         if (!isChangingConfigurations) finish()
     }
 

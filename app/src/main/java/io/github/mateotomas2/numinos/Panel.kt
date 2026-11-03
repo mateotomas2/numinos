@@ -84,6 +84,13 @@ class Panel(
     private var touchX = 0f
     private var touchY = 0f
     private var swallowTouch = false
+    private var suspended = false
+    private val windowParams = WindowManager.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT,
+    )
 
     private val root = object : FrameLayout(context) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -130,18 +137,31 @@ class Panel(
         root.addView(card, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         render()
         root.onBackGesture { goBack() }
-        windows.addView(
-            root,
-            WindowManager.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT,
-            ),
-        )
+        windows.addView(root, windowParams)
         card.visibility = View.INVISIBLE
         root.animate().alpha(1f).setDuration(260).start()
         card.post { reveal(opening = true) }
+    }
+
+    /** Steps aside for the reader, keeping this window's page and sentence for when you come back. */
+    fun suspendForReader() {
+        suspended = true
+        dismissPill()
+        root.animate().cancel()
+        root.animate().alpha(0f).setStartDelay(0).setDuration(140).withEndAction {
+            if (suspended) runCatching { windows.removeViewImmediate(root) }
+        }.start()
+    }
+
+    fun resumeFromReader() {
+        if (!suspended || closing) return
+        suspended = false
+        root.animate().cancel()
+        if (!root.isAttachedToWindow) {
+            windows.addView(root, windowParams)
+            root.onBackGesture { goBack() }
+        }
+        root.animate().alpha(1f).setStartDelay(0).setDuration(220).start()
     }
 
     private fun goBack() {
@@ -707,7 +727,7 @@ class Panel(
             setPadding(0, 0, 0, context.dp(8))
             tappable {
                 context.startActivity(Intent(context, ReaderTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                close()
+                suspendForReader()
             }
         })
     }
