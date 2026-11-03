@@ -264,8 +264,20 @@ class MainActivity : Activity() {
 
         heading("Random sentences come from")
         toggle(MINE_TITLE, store.isSourceOn(SOURCE_MINE)) { store.setSourceOn(SOURCE_MINE, it) }
+        toggle("Liked passages", store.isSourceOn(SOURCE_JAR)) { store.setSourceOn(SOURCE_JAR, it) }
         store.books.forEach { book ->
-            toggle("${book.title} (${book.sentences.size})", store.isSourceOn(book.id)) { store.setSourceOn(book.id, it) }
+            toggle("${book.title} (${book.marks.size} marked passages)", store.isSourceOn(book.id)) { store.setSourceOn(book.id, it) }
+        }
+        val hidden = store.hiddenKeys().size
+        if (hidden > 0) {
+            content.addView(label("Show $hidden hidden passages again", 14f, ACCENT, bold = true).apply {
+                minHeight = dp(44)
+                gravity = Gravity.CENTER_VERTICAL
+                tappable {
+                    store.restoreHidden()
+                    render()
+                }
+            })
         }
 
         heading("Add a video")
