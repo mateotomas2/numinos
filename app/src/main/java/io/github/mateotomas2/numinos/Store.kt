@@ -1,6 +1,7 @@
 package io.github.mateotomas2.numinos
 
 import android.content.Context
+import android.content.res.Configuration
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -8,6 +9,9 @@ import java.util.UUID
 
 const val SOURCE_MINE = "mine"
 const val MINE_TITLE = "My sentences"
+const val DARK_MODE_SYSTEM = "system"
+const val DARK_MODE_LIGHT = "light"
+const val DARK_MODE_DARK = "dark"
 
 data class Book(val id: String, val title: String, val credit: String, val sentences: List<Sentence>)
 data class Sentence(val key: String, val text: String, val source: String, val ref: String)
@@ -19,7 +23,17 @@ class Store private constructor(context: Context) {
     private val prefs = app.getSharedPreferences("numinos", Context.MODE_PRIVATE)
 
     init {
+        applyLook()
+    }
+
+    /** Works out the theme and light or dark mode in use. Call again when the system setting may have changed. */
+    fun applyLook() {
         Look.symbol = Symbol.of(symbolId)
+        Look.dark = when (darkMode) {
+            DARK_MODE_LIGHT -> false
+            DARK_MODE_DARK -> true
+            else -> app.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        }
     }
 
     val books: List<Book> by lazy {
@@ -137,7 +151,7 @@ class Store private constructor(context: Context) {
     @Synchronized
     fun removeVideo(id: String) = saveVideos(videos().filter { it.id != id })
 
-    fun categories(): List<String> = (listOf("Stretching", "Lymphatic", "Qigong") + videos().map { it.category }).distinct()
+    fun categories(): List<String> = videos().map { it.category }.filter(String::isNotEmpty).distinct()
 
     /** A line to preview a theme with, from the book that goes with it. */
     fun sampleSentence(symbol: Symbol): Sentence? {
@@ -156,7 +170,7 @@ class Store private constructor(context: Context) {
     fun reset() {
         prefs.edit().clear().commit()
         File(app.cacheDir, "thumbs").deleteRecursively()
-        Look.symbol = Symbol.YIN_YANG
+        applyLook()
     }
 
     // Small settings
@@ -179,6 +193,13 @@ class Store private constructor(context: Context) {
     var bubbleY: Int
         get() = prefs.getInt("bubbleY", 400)
         set(value) = prefs.edit().putInt("bubbleY", value).apply()
+
+    var darkMode: String
+        get() = prefs.getString("darkMode", DARK_MODE_SYSTEM) ?: DARK_MODE_SYSTEM
+        set(value) {
+            prefs.edit().putString("darkMode", value).apply()
+            applyLook()
+        }
 
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)

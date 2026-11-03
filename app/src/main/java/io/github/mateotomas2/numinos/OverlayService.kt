@@ -84,11 +84,13 @@ class OverlayService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        store.applyLook()
         bubbleParams?.let {
             it.x = restingX()
             it.y = it.y.coerceIn(0, screenSize().y - it.height)
             bubble?.let { view -> windows.updateViewLayout(view, it) }
         }
+        refreshBubble()
     }
 
     override fun onDestroy() {
@@ -225,6 +227,7 @@ class OverlayService : Service() {
     // Panel
 
     private fun openPanel() {
+        store.applyLook()
         val params = bubbleParams ?: return
         val originX = params.x + bubbleSize() / 2
         val originY = params.y + bubbleSize() / 2

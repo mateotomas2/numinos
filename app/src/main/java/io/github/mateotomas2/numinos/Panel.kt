@@ -45,6 +45,7 @@ class Panel(
     private var closing = false
     private var breath: ValueAnimator? = null
     private var inLibrary = false
+    private var showSentenceActions = false
     private val openDialogs = mutableListOf<android.app.AlertDialog>()
 
     private val root = object : FrameLayout(context) {
@@ -166,23 +167,52 @@ class Panel(
         layoutParams = LinearLayout.LayoutParams(-1, context.dp(1))
     }
 
-    private fun sentenceSection() = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(pad + context.dp(2), pad + context.dp(4), pad - context.dp(6), context.dp(6))
+    /** Tap to open the library, long-press to reveal the sentence's actions. */
+    private fun sentenceSection(): View {
         val current = sentence
-        val text = context.label(current?.text ?: "Add a sentence of your own, or turn on a book.", 21f, INK, serif = true).apply {
-            setLineSpacing(0f, 1.18f)
-            setPadding(0, 0, context.dp(10), 0)
-            maxLines = 7
-            ellipsize = android.text.TextUtils.TruncateAt.END
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad + context.dp(2), pad + context.dp(4), pad, context.dp(12))
+            addView(context.label(current?.text ?: "Add a sentence of your own, or turn on a book.", 21f, INK, serif = true).apply {
+                setLineSpacing(0f, 1.18f)
+                setPadding(0, 0, context.dp(26), 0)
+                maxLines = 7
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val source = current?.let { listOf(it.source, it.ref).filter(String::isNotEmpty).joinToString(" · ") }.orEmpty()
+            row.addView(context.label(source, 12f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+            if (showSentenceActions) addSentenceActions(row, current)
+            addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
+            tappable {
+                librarySource = sourceIdOf(sentence)
+                renderLibraryAnimated()
+            }
+            setOnLongClickListener {
+                showSentenceActions = !showSentenceActions
+                refreshHome()
+                true
+            }
         }
-        addView(text)
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        return FrameLayout(context).apply {
+            addView(body, FrameLayout.LayoutParams(-1, -2))
+            addView(
+                context.iconButton(R.drawable.ic_settings, "Settings", SOFT) {
+                    context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    close()
+                },
+                FrameLayout.LayoutParams(context.dp(40), context.dp(40), Gravity.TOP or Gravity.END).apply {
+                    topMargin = context.dp(6)
+                    marginEnd = context.dp(6)
+                },
+            )
         }
-        val source = current?.let { listOf(it.source, it.ref).filter(String::isNotEmpty).joinToString(" · ") }.orEmpty()
-        row.addView(context.label(source, 12f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+    }
+
+    private fun addSentenceActions(row: LinearLayout, current: Sentence?) {
         val size = context.dp(42)
         val pinned = current != null && store.pinnedKey == current.key
         val liked = current != null && current.key in store.likedKeys()
@@ -199,15 +229,6 @@ class Panel(
             sentence?.let { store.pinnedKey = if (store.pinnedKey == it.key) null else it.key }
             refreshHome()
         }, LinearLayout.LayoutParams(size, size))
-        row.addView(context.iconButton(R.drawable.ic_book, "Open book") {
-            librarySource = sourceIdOf(sentence)
-            renderLibraryAnimated()
-        }, LinearLayout.LayoutParams(size, size))
-        row.addView(context.iconButton(R.drawable.ic_settings, "Settings") {
-            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            close()
-        }, LinearLayout.LayoutParams(size, size))
-        addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
     }
 
     private fun refreshHome() {
@@ -229,12 +250,12 @@ class Panel(
 
     private fun videoSection(): View {
         val all = store.videos()
-        val categories = all.map { it.category }.distinct()
+        val categories = store.categories()
         if (category !in categories) category = null
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, context.dp(10), 0, context.dp(12))
-            if (categories.size > 1) {
+            if (categories.size > 1 || (categories.size == 1 && all.any { it.category.isEmpty() })) {
                 val chips = LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(pad, 0, pad, context.dp(10))
@@ -256,31 +277,36 @@ class Panel(
                 setPadding(pad, 0, pad, 0)
             }
             all.filter { category == null || it.category == category }.forEach { tiles.addView(videoTile(it)) }
-            tiles.addView(addVideoTile(empty = all.isEmpty()))
+            tiles.addView(addVideoButton())
             addView(horizontal(tiles))
         }
     }
 
     private fun videoTile(video: Video): View {
-        val thumbWidth = context.dp(138)
         val thumb = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(LINE, context.dp(12).toFloat())
-            clipToOutline = true
             contentDescription = video.title
         }
         YouTube.loadThumbnail(context, video.id, thumb)
-        val title = context.label(video.title.ifEmpty { "YouTube video" }, 12.5f).apply {
+        val shade = View(context).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xE0000000.toInt(), 0x00000000),
+            )
+        }
+        val title = context.label(video.title.ifEmpty { "YouTube video" }, 11.5f, android.graphics.Color.WHITE).apply {
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(context.dp(2), context.dp(6), context.dp(2), 0)
+            setPadding(context.dp(8), 0, context.dp(8), context.dp(6))
         }
         if (video.title.isEmpty()) YouTube.fetchTitle(context, video.id) { title.text = it }
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(thumb, LinearLayout.LayoutParams(thumbWidth, context.dp(78)))
-            addView(title, LinearLayout.LayoutParams(thumbWidth, -2))
-            layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = context.dp(10) }
+        return FrameLayout(context).apply {
+            background = rounded(SOFT, context.dp(12).toFloat())
+            clipToOutline = true
+            addView(thumb, FrameLayout.LayoutParams(-1, -1))
+            addView(shade, FrameLayout.LayoutParams(-1, context.dp(56), Gravity.BOTTOM))
+            addView(title, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            layoutParams = LinearLayout.LayoutParams(context.dp(138), context.dp(78)).apply { marginEnd = context.dp(10) }
             tappable {
                 store.markVideoUsed(video.id)
                 YouTube.open(context, video.id)
@@ -302,27 +328,16 @@ class Panel(
         }
     }
 
-    private fun addVideoTile(empty: Boolean): View {
-        val width = if (empty) context.dp(300) else context.dp(84)
-        return LinearLayout(context).apply {
-            orientation = if (empty) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = rounded(CARD, context.dp(12).toFloat(), context.dp(1), LINE)
-            layoutParams = LinearLayout.LayoutParams(width, context.dp(78))
-            addView(ImageView(context).apply {
-                setImageResource(R.drawable.ic_add)
-                imageTintList = android.content.res.ColorStateList.valueOf(SOFT)
-            })
-            addView(context.label(if (empty) "Add your first practice video" else "Add", 12.5f, SOFT))
-            tappable { promptVideo() }
-        }
+    private fun addVideoButton() = context.iconButton(R.drawable.ic_add, "Add a video", SOFT) { promptVideo() }.apply {
+        background = rounded(CARD, context.dp(20).toFloat(), context.dp(1), LINE)
+        layoutParams = LinearLayout.LayoutParams(context.dp(40), context.dp(40)).apply { gravity = Gravity.CENTER_VERTICAL }
     }
 
     private fun promptVideo() {
         val (box, field) = context.dialogField("YouTube link", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val dialog = context.dialogBuilder()
             .setTitle("Add a video")
-            .setMessage("Paste a link here, or use Share in the YouTube app and choose NuminOS.")
+            .setMessage("Paste a link here, or use Share in the YouTube or SmartTube app and choose NuminOS.")
             .setView(box)
             .setPositiveButton("Next") { _, _ ->
                 val id = YouTube.videoId(field.text.toString())
@@ -545,25 +560,27 @@ class Panel(
 
 /** Shared by the panel and the Share screen. */
 fun chooseCategory(context: Context, store: Store, present: (android.app.AlertDialog) -> Unit, onChosen: (String) -> Unit) {
+    fun askForName() {
+        val (box, field) = context.dialogField("Category name (optional)")
+        context.dialogBuilder()
+            .setTitle("New category")
+            .setView(box)
+            .setPositiveButton("Add") { _, _ -> onChosen(field.text.toString().trim()) }
+            .setNegativeButton("Cancel", null)
+            .create()
+            .let(present)
+    }
+
     val names = store.categories()
-    val dialog = context.dialogBuilder()
+    if (names.isEmpty()) {
+        askForName()
+        return
+    }
+    context.dialogBuilder()
         .setTitle("Which category?")
         .setItems((names + "New category…").toTypedArray()) { _, which ->
-            if (which < names.size) {
-                onChosen(names[which])
-            } else {
-                val (box, field) = context.dialogField("Category name")
-                context.dialogBuilder()
-                    .setTitle("New category")
-                    .setView(box)
-                    .setPositiveButton("Save") { _, _ ->
-                        onChosen(field.text.toString().trim().ifEmpty { "Practice" })
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .create()
-                    .let(present)
-            }
+            if (which < names.size) onChosen(names[which]) else askForName()
         }
         .create()
-    present(dialog)
+        .let(present)
 }

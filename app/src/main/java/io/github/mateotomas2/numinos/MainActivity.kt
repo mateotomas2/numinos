@@ -36,6 +36,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store.get(this)
+        store.applyLook()
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -52,6 +53,8 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        store.applyLook()
+        paintWindow()
         render()
         if (store.onboarded && canFloat() && store.symbolVisible) OverlayService.start(this)
     }
@@ -75,7 +78,7 @@ class MainActivity : Activity() {
         window.setBackgroundDrawable(ColorDrawable(PAPER))
         window.statusBarColor = PAPER
         window.navigationBarColor = PAPER
-        window.decorView.systemUiVisibility = if (Look.symbol.palette.dark) {
+        window.decorView.systemUiVisibility = if (Look.dark) {
             0
         } else {
             View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
@@ -101,6 +104,14 @@ class MainActivity : Activity() {
         TransitionManager.beginDelayedTransition(content, Fade().setDuration(300))
         render()
         if (store.onboarded) OverlayService.refresh(this)
+    }
+
+    private fun chooseDarkMode(mode: String) {
+        store.darkMode = mode
+        paintWindow()
+        TransitionManager.beginDelayedTransition(content, Fade().setDuration(300))
+        render()
+        OverlayService.refresh(this)
     }
 
     // Welcome, step 1: the theme
@@ -227,6 +238,13 @@ class MainActivity : Activity() {
         heading("Theme")
         content.addView(themeRow(), LinearLayout.LayoutParams(-1, -2))
 
+        heading("Light or dark")
+        content.addView(LinearLayout(this).apply {
+            listOf("System" to DARK_MODE_SYSTEM, "Light" to DARK_MODE_LIGHT, "Dark" to DARK_MODE_DARK).forEach { (name, mode) ->
+                addView(chip(name, store.darkMode == mode) { chooseDarkMode(mode) }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
+            }
+        })
+
         heading("Floating symbol")
         toggle("Show on screen", store.symbolVisible, canFloat()) { on ->
             store.symbolVisible = on
@@ -251,7 +269,7 @@ class MainActivity : Activity() {
         }
 
         heading("Add a video")
-        content.addView(body("In the YouTube or SmartTube app, tap Share on a video and choose NuminOS. You can also tap Add in the floating window and paste a link. Videos open in SmartTube if it's installed, otherwise in YouTube."))
+        content.addView(body("In the YouTube or SmartTube app, tap Share on a video and choose NuminOS. You can also tap + in the floating window and paste a link. Videos open in SmartTube if it's installed, otherwise in YouTube."))
 
         heading("Translations")
         store.books.forEach { content.addView(body("${it.title}: ${it.credit}")) }

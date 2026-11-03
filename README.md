@@ -8,16 +8,16 @@ Requires Android 8.0 or newer.
 
 ## What it does
 
-- **Sentence:** shows a random line from the books and your own sentences, or one you fix in place. You can like sentences and browse each book.
-- **Videos:** keeps your YouTube practice videos in simple categories, with the last one first. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
+- **Sentence:** shows a random line from the books and your own sentences, or one you fix in place. Tap it to open the library. Long-press it to get another, like it or fix it.
+- **Videos:** keeps your YouTube practice videos, in categories you create, with the last one first. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
 - **Meditation:** runs a countdown with an opening and closing bell, and keeps going with the screen locked.
 - **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
-- **Settings:** change the theme, the symbol's opacity and its offset from the edge, or delete everything and start over.
+- **Settings:** change the theme, choose light or dark (it follows your system by default), set the symbol's opacity and its offset from the edge, or delete everything and start over.
 
 ## Add your own
 
-- **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap Add in the floating window and paste a link.
-- **A sentence:** open the book icon, choose My sentences and tap +. You can also share selected text from any app to NuminOS.
+- **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap + in the floating window and paste a link.
+- **A sentence:** tap the sentence, choose My sentences and tap +. You can also share selected text from any app to NuminOS.
 - **Remove something:** long-press a video or one of your sentences.
 
 ## Install

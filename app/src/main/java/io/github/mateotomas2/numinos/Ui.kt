@@ -31,12 +31,13 @@ import kotlin.math.sin
 
 class Palette(
     val paper: Long, val card: Long, val ink: Long, val soft: Long,
-    val line: Long, val accent: Long, val night: Long, val dark: Boolean,
+    val line: Long, val accent: Long, val night: Long,
 )
 
 /** The theme in use. [Store] sets it as soon as the app starts. */
 object Look {
     var symbol = Symbol.YIN_YANG
+    var dark = false
 }
 
 val PAPER: Int get() = Look.symbol.palette.paper.toInt()
@@ -92,7 +93,7 @@ fun Context.iconButton(icon: Int, description: String, tint: Int = INK, onClick:
 fun Context.dialogBuilder() = AlertDialog.Builder(ContextThemeWrapper(this, dialogTheme()))
 
 private fun dialogTheme() =
-    if (Look.symbol.palette.dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
+    if (Look.dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
 
 /** Runs [action] for the back gesture on Android 13 and newer, in a window that isn't an activity. */
 fun View.onBackGesture(action: () -> Unit) {
@@ -125,27 +126,34 @@ fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or I
 }
 
 /** A symbol and the theme and book that go with it. */
-enum class Symbol(val label: String, val title: String, val bookId: String?, val palette: Palette) {
+enum class Symbol(val label: String, val title: String, val bookId: String?, private val light: Palette, private val dark: Palette) {
     YIN_YANG(
         "Yin-yang", "Tao", "tao",
-        Palette(0xFFF6F1E7, 0xFFFFFDF8, 0xFF2A2620, 0xFF6F675A, 0xFFE3DBCB, 0xFF3F7D68, 0xFF15130F, false),
+        Palette(0xFFF6F1E7, 0xFFFFFDF8, 0xFF2A2620, 0xFF6F675A, 0xFFE3DBCB, 0xFF3F7D68, 0xFF15130F),
+        Palette(0xFF181A18, 0xFF222522, 0xFFEDEBE3, 0xFFA5A79E, 0xFF363A35, 0xFF6FB79E, 0xFF0F110F),
     ),
     ENSO(
         "Enso", "Zen", null,
-        Palette(0xFF1C1B19, 0xFF272522, 0xFFEFEBE2, 0xFFA39E93, 0xFF3A3733, 0xFFD9694F, 0xFF0F0E0D, true),
+        Palette(0xFFF4F2EC, 0xFFFBFAF6, 0xFF1C1B19, 0xFF6B675F, 0xFFDEDAD0, 0xFFB8432B, 0xFF0F0E0D),
+        Palette(0xFF1C1B19, 0xFF272522, 0xFFEFEBE2, 0xFFA39E93, 0xFF3A3733, 0xFFD9694F, 0xFF0F0E0D),
     ),
     OM(
         "Om", "Vedanta", "upanishads",
-        Palette(0xFFFBF1E0, 0xFFFFF9EE, 0xFF3B2410, 0xFF7D6548, 0xFFEAD9BD, 0xFFB5620F, 0xFF1C1208, false),
+        Palette(0xFFFBF1E0, 0xFFFFF9EE, 0xFF3B2410, 0xFF7D6548, 0xFFEAD9BD, 0xFFB5620F, 0xFF1C1208),
+        Palette(0xFF221608, 0xFF2E2010, 0xFFF6E7CF, 0xFFC2A985, 0xFF463420, 0xFFE8943A, 0xFF140C04),
     ),
     WHEEL(
         "Dharma wheel", "Dharma", "dhammapada",
-        Palette(0xFF2A1316, 0xFF38191D, 0xFFF5E6C8, 0xFFC4AC8D, 0xFF4F2A2E, 0xFFE0A93B, 0xFF140809, true),
+        Palette(0xFFF8EFE2, 0xFFFFF9EF, 0xFF4A1B20, 0xFF7F5B52, 0xFFE8D6C4, 0xFF8F2F34, 0xFF140809),
+        Palette(0xFF2A1316, 0xFF38191D, 0xFFF5E6C8, 0xFFC4AC8D, 0xFF4F2A2E, 0xFFE0A93B, 0xFF140809),
     ),
     CROSS(
         "Cross", "Christian", "bible",
-        Palette(0xFFF3F5F9, 0xFFFFFFFF, 0xFF1E2A44, 0xFF5F6B82, 0xFFD8DEE9, 0xFF3A5FA8, 0xFF0E1421, false),
+        Palette(0xFFF3F5F9, 0xFFFFFFFF, 0xFF1E2A44, 0xFF5F6B82, 0xFFD8DEE9, 0xFF3A5FA8, 0xFF0E1421),
+        Palette(0xFF141B2B, 0xFF1E2739, 0xFFE8EDF7, 0xFFA5B0C6, 0xFF333E55, 0xFF86A8E8, 0xFF0E1421),
     );
+
+    val palette: Palette get() = if (Look.dark) dark else light
 
     companion object {
         fun of(id: String) = entries.firstOrNull { it.name == id } ?: YIN_YANG

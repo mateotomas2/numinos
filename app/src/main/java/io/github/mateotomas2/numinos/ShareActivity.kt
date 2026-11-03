@@ -26,7 +26,7 @@ class ShareActivity : Activity() {
             videoId != null -> chooseCategory(this, store, ::present) { category ->
                 store.addVideo(videoId, category)
                 YouTube.fetchTitle(applicationContext, videoId)
-                Toast.makeText(applicationContext, "Added to $category", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, if (category.isEmpty()) "Video added" else "Added to $category", Toast.LENGTH_SHORT).show()
             }
             text.isNotEmpty() -> present(
                 dialogBuilder()
