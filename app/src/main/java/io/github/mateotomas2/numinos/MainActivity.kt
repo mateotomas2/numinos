@@ -210,6 +210,7 @@ class MainActivity : Activity() {
             store.useBookOf(Look.symbol)
             store.onboarded = true
             store.symbolVisible = true
+            BookLoader.fetchShelf(this)
             OverlayService.start(this)
             finish()
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22) })
@@ -265,7 +266,7 @@ class MainActivity : Activity() {
         heading("Random sentences come from")
         toggle(MINE_TITLE, store.isSourceOn(SOURCE_MINE)) { store.setSourceOn(SOURCE_MINE, it) }
         toggle("Liked passages", store.isSourceOn(SOURCE_JAR)) { store.setSourceOn(SOURCE_JAR, it) }
-        store.books.forEach { book ->
+        store.shelfBooks().forEach { book ->
             toggle("${book.title} (${book.marks.size} marked passages)", store.isSourceOn(book.id)) { store.setSourceOn(book.id, it) }
         }
         val hidden = store.hiddenKeys().size

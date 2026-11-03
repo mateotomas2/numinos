@@ -14,7 +14,7 @@ android {
         minSdk = 26 // Android 8.0, for phones from about 2017-2018 onward
         targetSdk = 36
         versionCode = System.getenv("VERSION_CODE")?.toInt() ?: 1
-        versionName = "0.3.0" // Raise this in every PR: merging publishes it as a final release.
+        versionName = "0.4.0" // Raise this in every PR: merging publishes it as a final release.
         versionNameSuffix = System.getenv("VERSION_SUFFIX")
     }
 
@@ -36,6 +36,9 @@ android {
     buildTypes {
         release {
             if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

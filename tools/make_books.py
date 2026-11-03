@@ -1,22 +1,36 @@
 #!/usr/bin/env python3
-"""Builds app/src/main/assets/books from the public-domain source texts.
+"""Builds the starter books as EPUB files, and the catalog the app ships with.
 
-Each book becomes a folder holding book.json (its contents and marked passages)
-and one file per chapter. Nothing is retyped: marked passages are cut out of the
-parsed chapters, and any passage not found where it's claimed to be stops the build.
+The EPUBs are attached to a GitHub release and downloaded when a book is added.
+The catalog holds each book's details, fingerprint and marked passages, so random
+sentences work before any download. Nothing is retyped: marked passages are cut out
+of the parsed chapters, and any passage not found where it's claimed to be stops the build.
 
-usage: make_books.py TAO.txt DHAMMAPADA.txt UPANISHADS.txt WEB_VPL.txt OUT_DIR
+usage: make_books.py TAO.txt DHAMMAPADA.txt UPANISHADS.txt WEB_VPL.txt CATALOG.json DIST_DIR
 
   TAO         https://www.gutenberg.org/ebooks/216
   DHAMMAPADA  https://www.gutenberg.org/ebooks/2017
   UPANISHADS  https://www.gutenberg.org/ebooks/3283
   WEB_VPL     https://ebible.org/Scriptures/engwebp_vpl.zip (engwebp_vpl.txt)
+
+Changing a book's text means uploading its EPUB to a new release and raising RELEASE.
 """
+import hashlib
+import html
 import json
 import re
-import shutil
 import sys
+import zipfile
 from pathlib import Path
+
+RELEASE = "books-1"
+DOWNLOADS = f"https://github.com/mateotomas2/numinos/releases/download/{RELEASE}"
+
+STYLE = """h1 { font-size: 1.4em; font-weight: normal; margin: 0.6em 0 1em; }
+p { margin: 0 0 0.9em; text-indent: 0; }
+.label { font-size: 0.62em; opacity: 0.65; margin-right: 0.5em; }
+.commentary { font-family: sans-serif; font-size: 0.85em; opacity: 0.72; }
+"""
 
 # (chapter, first words, last words)
 TAO = [
@@ -355,31 +369,82 @@ def bible(path):
     return chapters, marks
 
 
-def write(out_dir, shelf, book_id, title, credit, parsed):
+def xhtml(title, body):
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>{html.escape(title, quote=False)}</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head><body>{body}</body></html>"""
+
+
+def chapter_page(chapter):
+    parts = [f"<h1>{html.escape(chapter['title'], quote=False)}</h1>"]
+    for index, passage in enumerate(chapter["passages"]):
+        text = html.escape(passage["t"], quote=False).replace("\n", "<br/>")
+        kind = ' class="commentary"' if passage.get("c") else ""
+        label = f'<span class="label">{html.escape(passage["l"], quote=False)}</span>' if passage["l"] and not passage.get("c") else ""
+        parts.append(f'<p id="p{index}"{kind}>{label}{text}</p>')
+    return xhtml(chapter["title"], "\n".join(parts))
+
+
+def add(epub, name, data, method=zipfile.ZIP_DEFLATED):
+    # A fixed date keeps the file, and so its fingerprint, the same on every run.
+    info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+    info.compress_type = method
+    epub.writestr(info, data)
+
+
+def write_epub(path, book_id, title, credit, chapters):
+    items = "".join(f'<item id="c{i}" href="c{i}.xhtml" media-type="application/xhtml+xml"/>' for i in range(len(chapters)))
+    spine = "".join(f'<itemref idref="c{i}"/>' for i in range(len(chapters)))
+    nav = "".join(f'<li><a href="c{i}.xhtml">{html.escape(c["title"], quote=False)}</a></li>' for i, c in enumerate(chapters))
+    package = f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">numinos-{book_id}</dc:identifier>
+<dc:title>{html.escape(title, quote=False)}</dc:title><dc:language>en</dc:language><dc:rights>{html.escape(credit, quote=False)}</dc:rights>
+<meta property="dcterms:modified">2026-01-01T00:00:00Z</meta></metadata>
+<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+<item id="css" href="style.css" media-type="text/css"/>{items}</manifest><spine>{spine}</spine></package>"""
+    with zipfile.ZipFile(path, "w") as epub:
+        add(epub, "mimetype", "application/epub+zip", zipfile.ZIP_STORED)
+        add(epub, "META-INF/container.xml", """<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="OEBPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""")
+        add(epub, "OEBPS/book.opf", package)
+        add(epub, "OEBPS/style.css", STYLE)
+        add(epub, "OEBPS/nav.xhtml", xhtml(title, f'<nav epub:type="toc"><ol>{nav}</ol></nav>'))
+        for index, chapter in enumerate(chapters):
+            add(epub, f"OEBPS/c{index}.xhtml", chapter_page(chapter))
+
+
+def catalog_entry(dist, shelf, book_id, title, credit, parsed):
     chapters, marks = parsed
-    folder = Path(out_dir, book_id)
-    folder.mkdir(parents=True)
-    book = {"id": book_id, "title": title, "credit": credit, "shelf": shelf,
-            "chapters": [c["title"] for c in chapters], "marks": marks}
-    (folder / "book.json").write_text(json.dumps(book, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    for index, chapter in enumerate(chapters):
+    for chapter in chapters:
         if not chapter["passages"]:
             fail(f"{title}: {chapter['title']} is empty")
-        (folder / f"c{index}.json").write_text(
-            json.dumps(chapter["passages"], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    passages = sum(len(c["passages"]) for c in chapters)
-    print(f"{title}: {len(chapters)} chapters, {passages} passages, {len(marks)} marks")
+    path = Path(dist, f"{book_id}.epub")
+    write_epub(path, book_id, title, credit, chapters)
+    data = path.read_bytes()
+    entry_marks = []
+    for mark in marks:
+        passage = chapters[mark["chapter"]]["passages"][mark["passage"]]
+        entry_marks.append({
+            "ref": mark["ref"],
+            "text": mark["text"],
+            "href": f"OEBPS/c{mark['chapter']}.xhtml",
+            "fragment": f"p{mark['passage']}",
+            "highlight": passage["t"][mark["start"]:mark["end"]],
+        })
+    print(f"{title}: {len(chapters)} chapters, {len(marks)} marks, {len(data) // 1024} KB")
+    return {"id": book_id, "title": title, "credit": credit, "shelf": shelf, "url": f"{DOWNLOADS}/{path.name}",
+            "sha256": hashlib.sha256(data).hexdigest(), "size": len(data), "marks": entry_marks}
 
 
 if __name__ == "__main__":
-    tao_path, dham_path, upa_path, web_path, out_dir = sys.argv[1:6]
-    out = Path(out_dir)
-    if out.parts[-2:] != ("assets", "books"):
-        fail("OUT_DIR must end in assets/books, because it's replaced")
-    parsed = [tao(tao_path), upanishads(upa_path), dhammapada(dham_path), bible(web_path)]
-    shutil.rmtree(out, ignore_errors=True)
-    out.mkdir(parents=True)
-    write(out, 0, "tao", "Tao Te Ching", "translated by James Legge (1891), public domain", parsed[0])
-    write(out, 1, "upanishads", "Upanishads", "translated by Swami Paramananda (1919), public domain", parsed[1])
-    write(out, 2, "dhammapada", "Dhammapada", "translated by F. Max Müller (1881), public domain", parsed[2])
-    write(out, 3, "bible", "Bible", "World English Bible, public domain", parsed[3])
+    tao_path, dham_path, upa_path, web_path, catalog, dist = sys.argv[1:7]
+    Path(dist).mkdir(parents=True, exist_ok=True)
+    books = [
+        catalog_entry(dist, 0, "tao", "Tao Te Ching", "translated by James Legge (1891), public domain", tao(tao_path)),
+        catalog_entry(dist, 1, "upanishads", "Upanishads", "translated by Swami Paramananda (1919), public domain", upanishads(upa_path)),
+        catalog_entry(dist, 2, "dhammapada", "Dhammapada", "translated by F. Max Müller (1881), public domain", dhammapada(dham_path)),
+        catalog_entry(dist, 3, "bible", "Bible", "World English Bible, public domain", bible(web_path)),
+    ]
+    Path(catalog).write_text(json.dumps({"books": books}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")

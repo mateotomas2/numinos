@@ -36,7 +36,7 @@
         </activity>
 
         <activity
-            android:name=".ReaderTestActivity"
+            android:name=".ReaderActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
