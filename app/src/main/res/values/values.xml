@@ -2,4 +2,18 @@
 <resources>
     <string name="app_name">NuminOS</string>
     <color name="launcher_bg">#FF2A2620</color>
+    <style name="FloatingReader" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.4</item>
+        <item name="android:windowAnimationStyle">@style/FloatingReaderMotion</item>
+    </style>
+
+    <style name="FloatingReaderMotion">
+        <item name="android:activityOpenEnterAnimation">@anim/reader_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/reader_exit</item>
+        <item name="android:taskOpenEnterAnimation">@anim/reader_enter</item>
+        <item name="android:taskCloseExitAnimation">@anim/reader_exit</item>
+    </style>
 </resources>

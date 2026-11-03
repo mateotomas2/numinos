@@ -701,6 +701,15 @@ class Panel(
             addView(context.label("Liked", 12.5f, SOFT).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(context.dp(120), -2))
         })
         card.addView(shelf)
+        card.addView(context.label("Try the floating EPUB reader", 14f, ACCENT, bold = true).apply {
+            gravity = Gravity.CENTER
+            minHeight = context.dp(48)
+            setPadding(0, 0, 0, context.dp(8))
+            tappable {
+                context.startActivity(Intent(context, ReaderTestActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                close()
+            }
+        })
     }
 
     private fun plank() = View(context).apply {
