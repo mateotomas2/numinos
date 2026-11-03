@@ -9,9 +9,10 @@ Requires Android 8.0 or newer.
 ## What it does
 
 - **Sentence:** shows a random line from the books and your own sentences, or one you fix in place. You can like sentences and browse each book.
-- **Videos:** keeps your YouTube practice videos in simple categories, with the last one first. One tap opens the video in YouTube.
+- **Videos:** keeps your YouTube practice videos in simple categories, with the last one first. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
 - **Meditation:** runs a countdown with an opening and closing bell, and keeps going with the screen locked.
-- **Symbol:** choose yin-yang, enso, om, dharma wheel or cross.
+- **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
+- **Settings:** change the theme, the symbol's opacity and its offset from the edge, or delete everything and start over.
 
 ## Add your own
 
@@ -21,7 +22,7 @@ Requires Android 8.0 or newer.
 
 ## Install
 
-Download the APK from [Releases](https://github.com/mateotomas2/numinos/releases/latest) and open it on your phone. In NuminOS, allow **Show over other apps**.
+Download the APK from [Releases](https://github.com/mateotomas2/numinos/releases/latest) and open it on your phone. Choose a theme, then allow **Show over other apps**.
 
 If Android says this is a restricted setting, open NuminOS in App info, tap the ⋮ menu and choose **Allow restricted settings**.
 

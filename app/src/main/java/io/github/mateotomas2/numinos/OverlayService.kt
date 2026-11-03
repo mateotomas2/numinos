@@ -7,8 +7,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.PixelFormat
@@ -36,6 +38,13 @@ class OverlayService : Service() {
     private var panel: Panel? = null
     private var meditation: Meditation? = null
 
+    /** Android announces the Home and Recents gestures this way; the window closes for them. */
+    private val homeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            panel?.close()
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -45,6 +54,13 @@ class OverlayService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Floating symbol", NotificationManager.IMPORTANCE_MIN),
         )
+        val closeFilter = IntentFilter(ACTION_SYSTEM_CLOSE)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(homeReceiver, closeFilter, RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(homeReceiver, closeFilter)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -56,6 +72,7 @@ class OverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_END -> meditation?.finish(completed = false)
+            ACTION_REFRESH -> refreshBubble()
         }
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
@@ -75,6 +92,7 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        unregisterReceiver(homeReceiver)
         meditation?.release()
         panel?.dismissNow()
         removeBubble()
@@ -103,9 +121,23 @@ class OverlayService : Service() {
         return size
     }
 
-    /** At rest, a third of the symbol is tucked behind the screen edge. */
-    private fun restingX(): Int =
-        if (store.bubbleOnLeft) -bubbleSize() / 3 else screenSize().x - bubbleSize() * 2 / 3
+    private fun idleAlpha() = store.bubbleOpacity / 100f
+
+    private fun restingX(): Int {
+        val offset = dp(store.bubbleOffsetDp)
+        return if (store.bubbleOnLeft) offset else screenSize().x - bubbleSize() - offset
+    }
+
+    /** Applies changed settings straight away, so the sliders work as a live preview. */
+    private fun refreshBubble() {
+        val view = bubble ?: return
+        val params = bubbleParams ?: return
+        view.animate().cancel()
+        view.symbol = Symbol.of(store.symbolId)
+        view.alpha = idleAlpha()
+        params.x = restingX()
+        windows.updateViewLayout(view, params)
+    }
 
     private fun showBubble() {
         if (bubble != null) return
@@ -129,7 +161,7 @@ class OverlayService : Service() {
         windows.addView(view, params)
         bubble = view
         bubbleParams = params
-        view.animate().alpha(IDLE_ALPHA).scaleX(1f).scaleY(1f).setDuration(320)
+        view.animate().alpha(idleAlpha()).scaleX(1f).scaleY(1f).setDuration(320)
             .setInterpolator(OvershootInterpolator(1.4f)).start()
     }
 
@@ -175,7 +207,7 @@ class OverlayService : Service() {
     }
 
     private fun settle(view: View, params: WindowManager.LayoutParams) {
-        view.alpha = IDLE_ALPHA
+        view.alpha = idleAlpha()
         store.bubbleOnLeft = params.x + bubbleSize() / 2 < screenSize().x / 2
         store.bubbleY = params.y
         ValueAnimator.ofInt(params.x, restingX()).apply {
@@ -198,16 +230,12 @@ class OverlayService : Service() {
         val originY = params.y + bubbleSize() / 2
         val view = bubble ?: return
         view.animate().rotationBy(180f).alpha(0f).setDuration(220).withEndAction { removeBubble() }.start()
-        panel = Panel(this, windows, store, originX, originY, ::onPanelClosed, ::startMeditation, ::applySymbol).also { it.show() }
+        panel = Panel(this, windows, store, originX, originY, ::onPanelClosed, ::startMeditation).also { it.show() }
     }
 
     private fun onPanelClosed() {
         panel = null
         if (meditation == null) showBubble()
-    }
-
-    private fun applySymbol(symbol: Symbol) {
-        store.symbolId = symbol.name
     }
 
     // Meditation
@@ -255,10 +283,18 @@ class OverlayService : Service() {
         private const val NOTIFICATION = 1
         private const val ACTION_HIDE = "hide"
         private const val ACTION_END = "end"
-        private const val IDLE_ALPHA = 0.88f
+        private const val ACTION_REFRESH = "refresh"
+        @Suppress("DEPRECATION")
+        private const val ACTION_SYSTEM_CLOSE = Intent.ACTION_CLOSE_SYSTEM_DIALOGS
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, OverlayService::class.java))
+        }
+
+        fun refresh(context: Context) {
+            if (Store.get(context).symbolVisible && Settings.canDrawOverlays(context)) {
+                context.startForegroundService(Intent(context, OverlayService::class.java).setAction(ACTION_REFRESH))
+            }
         }
 
         fun stop(context: Context) {

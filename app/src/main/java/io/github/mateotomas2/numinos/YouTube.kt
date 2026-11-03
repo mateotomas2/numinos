@@ -18,6 +18,14 @@ import java.net.URLEncoder
 import java.util.concurrent.Executors
 
 object YouTube {
+    /** In order of preference. The last entry lets Android use any app that can open the link. */
+    private val PLAYERS = listOf(
+        "org.smarttube.stable",
+        "org.smarttube.beta",
+        "app.smarttube.fdroid",
+        "com.google.android.youtube",
+        null,
+    )
     private val idPattern = Regex(
         """(?:youtu\.be/|youtube\.com/(?:watch\?(?:[^\s]*&)?v=|shorts/|embed/|live/))([A-Za-z0-9_-]{11})""",
     )
@@ -29,11 +37,15 @@ object YouTube {
     fun open(context: Context, id: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$id"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No app can open this video", Toast.LENGTH_SHORT).show()
+        for (app in PLAYERS) {
+            try {
+                context.startActivity(Intent(intent).setPackage(app))
+                return
+            } catch (_: ActivityNotFoundException) {
+                // Not installed: try the next one.
+            }
         }
+        Toast.makeText(context, "No app can open this video", Toast.LENGTH_SHORT).show()
     }
 
     private fun get(url: String): ByteArray {

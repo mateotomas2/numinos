@@ -75,6 +75,7 @@ class Meditation(
             alpha = 0f
             setOnClickListener { onTap() }
         }
+        view.onBackGesture { onTap() }
         val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL

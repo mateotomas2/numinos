@@ -11,12 +11,15 @@ import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.os.Build
 import android.text.InputType
 import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -26,13 +29,23 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-const val PAPER = 0xFFF6F1E7.toInt()
-const val CARD = 0xFFFFFDF8.toInt()
-const val INK = 0xFF2A2620.toInt()
-const val SOFT = 0xFF6F675A.toInt()
-const val LINE = 0xFFE3DBCB.toInt()
-const val ACCENT = 0xFF3F7D68.toInt()
-const val NIGHT = 0xFF15130F.toInt()
+class Palette(
+    val paper: Long, val card: Long, val ink: Long, val soft: Long,
+    val line: Long, val accent: Long, val night: Long, val dark: Boolean,
+)
+
+/** The theme in use. [Store] sets it as soon as the app starts. */
+object Look {
+    var symbol = Symbol.YIN_YANG
+}
+
+val PAPER: Int get() = Look.symbol.palette.paper.toInt()
+val CARD: Int get() = Look.symbol.palette.card.toInt()
+val INK: Int get() = Look.symbol.palette.ink.toInt()
+val SOFT: Int get() = Look.symbol.palette.soft.toInt()
+val LINE: Int get() = Look.symbol.palette.line.toInt()
+val ACCENT: Int get() = Look.symbol.palette.accent.toInt()
+val NIGHT: Int get() = Look.symbol.palette.night.toInt()
 
 fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
 
@@ -57,7 +70,7 @@ fun Context.label(text: String, sizeSp: Float = 14f, color: Int = INK, serif: Bo
     }
 
 fun Context.chip(text: String, selected: Boolean, onClick: () -> Unit) =
-    label(text, 13f, if (selected) Color.WHITE else INK).apply {
+    label(text, 13f, if (selected) PAPER else INK).apply {
         gravity = Gravity.CENTER
         minHeight = dp(34)
         setPadding(dp(13), dp(6), dp(13), dp(6))
@@ -76,7 +89,22 @@ fun Context.iconButton(icon: Int, description: String, tint: Int = INK, onClick:
     }
 
 /** Dialog that can appear above other apps, from the service as well as from an activity. */
-fun Context.dialogBuilder() = AlertDialog.Builder(ContextThemeWrapper(this, android.R.style.Theme_Material_Light_Dialog_Alert))
+fun Context.dialogBuilder() = AlertDialog.Builder(ContextThemeWrapper(this, dialogTheme()))
+
+private fun dialogTheme() =
+    if (Look.symbol.palette.dark) android.R.style.Theme_Material_Dialog_Alert else android.R.style.Theme_Material_Light_Dialog_Alert
+
+/** Runs [action] for the back gesture on Android 13 and newer, in a window that isn't an activity. */
+fun View.onBackGesture(action: () -> Unit) {
+    if (Build.VERSION.SDK_INT >= 33) {
+        post {
+            findOnBackInvokedDispatcher()?.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                OnBackInvokedCallback { action() },
+            )
+        }
+    }
+}
 
 fun AlertDialog.showOverlay() {
     window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
@@ -85,7 +113,7 @@ fun AlertDialog.showOverlay() {
 }
 
 fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE): Pair<View, EditText> {
-    val field = EditText(ContextThemeWrapper(this, android.R.style.Theme_Material_Light_Dialog_Alert)).apply {
+    val field = EditText(ContextThemeWrapper(this, dialogTheme())).apply {
         this.hint = hint
         inputType = type
     }
@@ -96,8 +124,28 @@ fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or I
     return box to field
 }
 
-enum class Symbol(val label: String) {
-    YIN_YANG("Yin-yang"), ENSO("Enso"), OM("Om"), WHEEL("Dharma wheel"), CROSS("Cross");
+/** A symbol and the theme and book that go with it. */
+enum class Symbol(val label: String, val title: String, val bookId: String?, val palette: Palette) {
+    YIN_YANG(
+        "Yin-yang", "Tao", "tao",
+        Palette(0xFFF6F1E7, 0xFFFFFDF8, 0xFF2A2620, 0xFF6F675A, 0xFFE3DBCB, 0xFF3F7D68, 0xFF15130F, false),
+    ),
+    ENSO(
+        "Enso", "Zen", null,
+        Palette(0xFF1C1B19, 0xFF272522, 0xFFEFEBE2, 0xFFA39E93, 0xFF3A3733, 0xFFD9694F, 0xFF0F0E0D, true),
+    ),
+    OM(
+        "Om", "Vedanta", "upanishads",
+        Palette(0xFFFBF1E0, 0xFFFFF9EE, 0xFF3B2410, 0xFF7D6548, 0xFFEAD9BD, 0xFFB5620F, 0xFF1C1208, false),
+    ),
+    WHEEL(
+        "Dharma wheel", "Dharma", "dhammapada",
+        Palette(0xFF2A1316, 0xFF38191D, 0xFFF5E6C8, 0xFFC4AC8D, 0xFF4F2A2E, 0xFFE0A93B, 0xFF140809, true),
+    ),
+    CROSS(
+        "Cross", "Christian", "bible",
+        Palette(0xFFF3F5F9, 0xFFFFFFFF, 0xFF1E2A44, 0xFF5F6B82, 0xFFD8DEE9, 0xFF3A5FA8, 0xFF0E1421, false),
+    );
 
     companion object {
         fun of(id: String) = entries.firstOrNull { it.name == id } ?: YIN_YANG
@@ -110,10 +158,12 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
         set(value) {
             field = value
             contentDescription = value.label
+            discColor = value.palette.ink.toInt()
+            markColor = value.palette.paper.toInt()
             invalidate()
         }
-    var discColor = INK
-    var markColor = PAPER
+    var discColor = symbol.palette.ink.toInt()
+    var markColor = symbol.palette.paper.toInt()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val box = RectF()

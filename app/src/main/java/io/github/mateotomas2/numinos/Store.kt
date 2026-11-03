@@ -3,6 +3,7 @@ package io.github.mateotomas2.numinos
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.UUID
 
 const val SOURCE_MINE = "mine"
@@ -16,6 +17,10 @@ data class Video(val id: String, val title: String, val category: String, val la
 class Store private constructor(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("numinos", Context.MODE_PRIVATE)
+
+    init {
+        Look.symbol = Symbol.of(symbolId)
+    }
 
     val books: List<Book> by lazy {
         app.assets.list("books").orEmpty().sorted().map { file ->
@@ -134,11 +139,34 @@ class Store private constructor(context: Context) {
 
     fun categories(): List<String> = (listOf("Stretching", "Lymphatic", "Qigong") + videos().map { it.category }).distinct()
 
+    /** A line to preview a theme with, from the book that goes with it. */
+    fun sampleSentence(symbol: Symbol): Sentence? {
+        val book = books.firstOrNull { it.id == symbol.bookId }
+        return (book?.sentences ?: books.flatMap { it.sentences }).randomOrNull()
+    }
+
+    /** First-run default: random sentences come from the theme's book and your own. */
+    fun useBookOf(symbol: Symbol) {
+        val bookId = symbol.bookId ?: return
+        books.forEach { setSourceOn(it.id, it.id == bookId) }
+    }
+
+    /** Erases everything the user added or chose. */
+    @Synchronized
+    fun reset() {
+        prefs.edit().clear().commit()
+        File(app.cacheDir, "thumbs").deleteRecursively()
+        Look.symbol = Symbol.YIN_YANG
+    }
+
     // Small settings
 
     var symbolId: String
         get() = prefs.getString("symbol", Symbol.YIN_YANG.name) ?: Symbol.YIN_YANG.name
-        set(value) = prefs.edit().putString("symbol", value).apply()
+        set(value) {
+            prefs.edit().putString("symbol", value).apply()
+            Look.symbol = Symbol.of(value)
+        }
 
     var minutes: Int
         get() = prefs.getInt("minutes", 10)
@@ -151,6 +179,19 @@ class Store private constructor(context: Context) {
     var bubbleY: Int
         get() = prefs.getInt("bubbleY", 400)
         set(value) = prefs.edit().putInt("bubbleY", value).apply()
+
+    var onboarded: Boolean
+        get() = prefs.getBoolean("onboarded", false)
+        set(value) = prefs.edit().putBoolean("onboarded", value).apply()
+
+    var bubbleOpacity: Int
+        get() = prefs.getInt("bubbleOpacity", 88)
+        set(value) = prefs.edit().putInt("bubbleOpacity", value).apply()
+
+    /** Negative tucks the symbol behind the screen edge; positive moves it away from the edge. */
+    var bubbleOffsetDp: Int
+        get() = prefs.getInt("bubbleOffsetDp", -18)
+        set(value) = prefs.edit().putInt("bubbleOffsetDp", value).apply()
 
     var symbolVisible: Boolean
         get() = prefs.getBoolean("symbolVisible", true)

@@ -36,7 +36,6 @@ class Panel(
     private val originY: Int,
     private val onClosed: () -> Unit,
     private val onMeditate: (Int) -> Unit,
-    private val onSymbol: (Symbol) -> Unit,
 ) {
     private val context = ContextThemeWrapper(serviceContext, android.R.style.Theme_Material_Light_NoActionBar)
     private val pad = context.dp(16)
@@ -45,11 +44,13 @@ class Panel(
     private var librarySource = SOURCE_MINE
     private var closing = false
     private var breath: ValueAnimator? = null
+    private var inLibrary = false
+    private val openDialogs = mutableListOf<android.app.AlertDialog>()
 
     private val root = object : FrameLayout(context) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
             if (event.keyCode == KeyEvent.KEYCODE_BACK) {
-                if (event.action == KeyEvent.ACTION_UP) close()
+                if (event.action == KeyEvent.ACTION_UP) goBack()
                 return true
             }
             return super.dispatchKeyEvent(event)
@@ -69,6 +70,7 @@ class Panel(
         val width = min(context.resources.displayMetrics.widthPixels - context.dp(24), context.dp(380))
         root.addView(card, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         renderHome()
+        root.onBackGesture { goBack() }
         windows.addView(
             root,
             WindowManager.LayoutParams(
@@ -83,9 +85,24 @@ class Panel(
         card.post { reveal(opening = true) }
     }
 
+    private fun goBack() {
+        if (inLibrary) {
+            animateChange()
+            renderHome()
+        } else {
+            close()
+        }
+    }
+
+    private fun android.app.AlertDialog.showInPanel() {
+        openDialogs.add(this)
+        showOverlay()
+    }
+
     fun close(then: () -> Unit = {}) {
         if (closing) return
         closing = true
+        openDialogs.forEach { runCatching { it.dismiss() } }
         root.animate().alpha(0f).setStartDelay(90).setDuration(240).start()
         reveal(opening = false) {
             dismissNow()
@@ -97,6 +114,7 @@ class Panel(
     fun dismissNow() {
         closing = true
         breath?.cancel()
+        openDialogs.forEach { runCatching { it.dismiss() } }
         runCatching { windows.removeView(root) }
     }
 
@@ -133,6 +151,7 @@ class Panel(
     // Home: everything together
 
     private fun renderHome() {
+        inLibrary = false
         breath?.cancel()
         card.removeAllViews()
         card.addView(sentenceSection())
@@ -140,8 +159,6 @@ class Panel(
         card.addView(videoSection())
         card.addView(divider())
         card.addView(meditationSection())
-        card.addView(divider())
-        card.addView(symbolSection())
     }
 
     private fun divider() = View(context).apply {
@@ -185,6 +202,10 @@ class Panel(
         row.addView(context.iconButton(R.drawable.ic_book, "Open book") {
             librarySource = sourceIdOf(sentence)
             renderLibraryAnimated()
+        }, LinearLayout.LayoutParams(size, size))
+        row.addView(context.iconButton(R.drawable.ic_settings, "Settings") {
+            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            close()
         }, LinearLayout.LayoutParams(size, size))
         addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
     }
@@ -230,6 +251,8 @@ class Panel(
             }
             val tiles = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
+                // Otherwise the row lines up text baselines, and the Add tile sits lower than the thumbnails.
+                isBaselineAligned = false
                 setPadding(pad, 0, pad, 0)
             }
             all.filter { category == null || it.category == category }.forEach { tiles.addView(videoTile(it)) }
@@ -273,7 +296,7 @@ class Panel(
                     }
                     .setNegativeButton("Keep", null)
                     .create()
-                dialog.showOverlay()
+                dialog.showInPanel()
                 true
             }
         }
@@ -286,7 +309,10 @@ class Panel(
             gravity = Gravity.CENTER
             background = rounded(CARD, context.dp(12).toFloat(), context.dp(1), LINE)
             layoutParams = LinearLayout.LayoutParams(width, context.dp(78))
-            addView(ImageView(context).apply { setImageResource(R.drawable.ic_add) })
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_add)
+                imageTintList = android.content.res.ColorStateList.valueOf(SOFT)
+            })
             addView(context.label(if (empty) "Add your first practice video" else "Add", 12.5f, SOFT))
             tappable { promptVideo() }
         }
@@ -308,11 +334,11 @@ class Panel(
             }
             .setNegativeButton("Cancel", null)
             .create()
-        dialog.showOverlay()
+        dialog.showInPanel()
     }
 
     private fun pickCategory(id: String) {
-        chooseCategory(context, store, { it.showOverlay() }) { name ->
+        chooseCategory(context, store, { it.showInPanel() }) { name ->
             store.addVideo(id, name)
             YouTube.fetchTitle(context, id) { refreshHome() }
             refreshHome()
@@ -383,35 +409,7 @@ class Panel(
             }
             .setNegativeButton("Cancel", null)
             .create()
-            .showOverlay()
-    }
-
-    private fun symbolSection() = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(pad, context.dp(8), context.dp(8), context.dp(10))
-        val selected = Symbol.of(store.symbolId)
-        Symbol.entries.forEach { symbol ->
-            val view = SymbolView(context, symbol).apply {
-                if (symbol != selected) {
-                    alpha = 0.42f
-                }
-                setOnClickListener {
-                    store.symbolId = symbol.name
-                    onSymbol(symbol)
-                    refreshHome()
-                }
-            }
-            addView(FrameLayout(context).apply {
-                val mark = context.dp(if (symbol == selected) 36 else 30)
-                addView(view, FrameLayout.LayoutParams(mark, mark, Gravity.CENTER))
-            }, LinearLayout.LayoutParams(context.dp(44), context.dp(44)))
-        }
-        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-        addView(context.iconButton(R.drawable.ic_settings, "Settings") {
-            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            close()
-        }, LinearLayout.LayoutParams(context.dp(44), context.dp(44)))
+            .showInPanel()
     }
 
     // Library: every sentence of one book
@@ -431,6 +429,7 @@ class Panel(
     }
 
     private fun renderLibrary() {
+        inLibrary = true
         breath?.cancel()
         card.removeAllViews()
         val header = LinearLayout(context).apply {
@@ -520,7 +519,7 @@ class Panel(
                     }
                     .setNegativeButton("Keep", null)
                     .create()
-                    .showOverlay()
+                    .showInPanel()
                 true
             }
         }
@@ -540,7 +539,7 @@ class Panel(
             }
             .setNegativeButton("Cancel", null)
             .create()
-            .showOverlay()
+            .showInPanel()
     }
 }
 
