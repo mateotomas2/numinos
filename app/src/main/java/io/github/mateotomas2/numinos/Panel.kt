@@ -324,7 +324,6 @@ class Panel(
             addView(context.label(current?.text ?: "Add a sentence of your own, or turn on a book.", 21f, INK, serif = true).apply {
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, context.dp(26), 0)
-                minLines = 4
                 maxLines = 10
                 ellipsize = TextUtils.TruncateAt.END
             })
@@ -404,25 +403,24 @@ class Panel(
         shown.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160).start()
     }
 
+    /** Every action closes the pill, in every place it appears. */
     private fun fillPill(shown: LinearLayout, item: Sentence) {
-        shown.removeAllViews()
         val size = context.dp(46)
         fun add(icon: Int, description: String, tint: Int = INK, action: () -> Unit) {
-            shown.addView(context.iconButton(icon, description, tint, action), LinearLayout.LayoutParams(size, size))
+            shown.addView(context.iconButton(icon, description, tint) {
+                dismissPill()
+                action()
+            }, LinearLayout.LayoutParams(size, size))
         }
-        val onHome = page == Page.HOME
-        if (onHome) {
+        if (page == Page.HOME) {
             add(R.drawable.ic_another, "Another sentence") {
                 store.setPinned(null)
-                val next = store.randomSentence(sentence?.key)
-                changeSentence(next)
-                next?.let { fillPill(shown, it) }
+                changeSentence(store.randomSentence(sentence?.key))
             }
         }
         val liked = store.isLiked(item.key)
         add(if (liked) R.drawable.ic_liked else R.drawable.ic_like, if (liked) "Remove from jar" else "Like", if (liked) ACCENT else INK) {
             store.toggleLiked(item)
-            fillPill(shown, item)
             if (page == Page.JAR) render()
         }
         val pinned = store.pinned()?.key == item.key
@@ -433,17 +431,17 @@ class Panel(
                 store.setPinned(item)
                 sentence = item
             }
-            fillPill(shown, item)
-            if (!onHome) Toast.makeText(context, if (pinned) "Unfixed" else "Fixed on top", Toast.LENGTH_SHORT).show()
+            if (page != Page.HOME) Toast.makeText(context, if (pinned) "Unfixed" else "Fixed on top", Toast.LENGTH_SHORT).show()
         }
         if (item.bookId != null) {
             add(R.drawable.ic_less, "Show less") {
                 store.hide(item.key)
-                val wasPinned = store.pinned()?.key == item.key
-                if (wasPinned) store.setPinned(null)
-                dismissPill()
-                if (page == Page.HOME) changeSentence(store.randomSentence(item.key))
-                else if (sentence?.key == item.key) sentence = store.randomSentence(item.key)
+                if (store.pinned()?.key == item.key) store.setPinned(null)
+                if (page == Page.HOME) {
+                    changeSentence(store.randomSentence(item.key))
+                } else if (sentence?.key == item.key) {
+                    sentence = store.randomSentence(item.key)
+                }
                 Toast.makeText(context, "It won't come up at random. Settings can bring it back.", Toast.LENGTH_SHORT).show()
             }
         } else {
@@ -452,7 +450,6 @@ class Panel(
                     .setMessage("Delete this sentence?")
                     .setPositiveButton("Delete") { _, _ ->
                         store.removeMine(item.key)
-                        dismissPill()
                         if (sentence?.key == item.key) sentence = store.sentenceToShow()
                         render()
                     }
