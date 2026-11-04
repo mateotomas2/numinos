@@ -168,13 +168,19 @@ fun View.hideSystemBars() {
 /** How far content must stay from each edge to clear any bars still showing and the camera cutout. */
 @Suppress("DEPRECATION")
 fun screenEdges(insets: WindowInsets): Rect {
-    val cutout = if (Build.VERSION.SDK_INT >= 28) insets.displayCutout else null
-    return Rect(
-        maxOf(insets.systemWindowInsetLeft, cutout?.safeInsetLeft ?: 0),
-        maxOf(insets.systemWindowInsetTop, cutout?.safeInsetTop ?: 0),
-        maxOf(insets.systemWindowInsetRight, cutout?.safeInsetRight ?: 0),
-        maxOf(insets.systemWindowInsetBottom, cutout?.safeInsetBottom ?: 0),
+    val edges = Rect(
+        insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
+        insets.systemWindowInsetRight, insets.systemWindowInsetBottom,
     )
+    if (Build.VERSION.SDK_INT >= 28) {
+        insets.displayCutout?.let {
+            edges.left = maxOf(edges.left, it.safeInsetLeft)
+            edges.top = maxOf(edges.top, it.safeInsetTop)
+            edges.right = maxOf(edges.right, it.safeInsetRight)
+            edges.bottom = maxOf(edges.bottom, it.safeInsetBottom)
+        }
+    }
+    return edges
 }
 
 /** The minutes the timer offers. 0 means no timer. */
