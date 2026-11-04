@@ -23,6 +23,7 @@ import android.transition.TransitionManager
 import android.transition.TransitionSet
 import android.view.ContextThemeWrapper
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -39,9 +40,13 @@ import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private enum class Page { HOME, SHELF, CONTENTS, READER, NOTEBOOK, JAR }
+
+private const val HOLD_START = "Let go to start, slide sideways to cancel"
 
 private val SPINE_COLORS = mapOf(
     "tao" to 0xFF3F7D68.toInt(),
@@ -739,35 +744,93 @@ class Panel(
             }
             start()
         }
-        val options = (listOf(5, 10, 20) + store.minutes).distinct().sorted()
-        options.forEach { minutes ->
-            addView(context.chip("$minutes", minutes == store.minutes) {
-                store.minutes = minutes
-                refreshHomeVideos()
-            }.apply { minimumWidth = context.dp(38); setPadding(context.dp(8), 0, context.dp(8), 0) },
-                LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
-        }
-        addView(context.chip("…", false) { promptMinutes() }.apply {
-            contentDescription = "Other duration"
-            minimumWidth = context.dp(34)
-            setPadding(context.dp(6), 0, context.dp(6), 0)
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
+        addView(durationChip(), LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
     }
 
-    private fun promptMinutes() {
-        val (box, field) = context.dialogField("Minutes", InputType.TYPE_CLASS_NUMBER)
+    /** Tap to choose on the wheel. Hold to set it with one drag and start on letting go. */
+    private fun durationChip() = context.chip(durationLabel(store.minutes), false) { promptDuration() }.apply {
+        contentDescription = if (store.minutes == 0) "No timer. Change duration" else "${store.minutes} minutes. Change duration"
+        minimumWidth = context.dp(58)
+        var whileHeld: ((MotionEvent) -> Unit)? = null
+        setOnLongClickListener {
+            if (!isPressed) return@setOnLongClickListener false // Accessibility services long-click with no finger to follow.
+            isPressed = false
+            parent.requestDisallowInterceptTouchEvent(true)
+            whileHeld = holdToStart(this) { whileHeld = null }
+            true
+        }
+        setOnTouchListener { _, event ->
+            whileHeld?.let { it(event); true } ?: false
+        }
+    }
+
+    private fun durationChoices() = (DURATIONS + store.minutes).distinct().sorted()
+
+    private fun promptDuration() {
+        val values = durationChoices()
+        val wheel = context.durationWheel(values, store.minutes)
+        val box = FrameLayout(context).apply {
+            addView(wheel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        }
         context.dialogBuilder()
-            .setTitle("How many minutes?")
+            .setTitle("How long?")
             .setView(box)
-            .setPositiveButton("Set") { _, _ ->
-                field.text.toString().toIntOrNull()?.takeIf { it in 1..600 }?.let {
-                    store.minutes = it
-                    refreshHomeVideos()
-                }
+            .setPositiveButton("Start") { _, _ ->
+                store.minutes = values[wheel.value]
+                val minutes = store.minutes
+                close { onMeditate(minutes) }
             }
-            .setNegativeButton("Cancel", null)
+            .setOnCancelListener {
+                store.minutes = values[wheel.value]
+                refreshHomeVideos()
+            }
             .create()
             .showInPanel()
+    }
+
+    /** Shows the wheel above the finger and returns what handles the rest of the touch. */
+    private fun holdToStart(chip: View, onEnded: () -> Unit): (MotionEvent) -> Unit {
+        val values = durationChoices()
+        val wheel = context.durationWheel(values, store.minutes)
+        val first = wheel.value
+        val hint = context.label(HOLD_START, 12f, SOFT).apply { gravity = Gravity.CENTER }
+        val floating = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(CARD, context.dp(20).toFloat())
+            elevation = context.dp(24).toFloat()
+            setPadding(context.dp(20), context.dp(8), context.dp(20), context.dp(12))
+            addView(wheel)
+            addView(hint, LinearLayout.LayoutParams(-2, -2).apply { topMargin = context.dp(4) })
+        }
+        val rootTop = IntArray(2).also { root.getLocationOnScreen(it) }[1]
+        root.addView(floating, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = (touchY.toInt() - rootTop - context.dp(290)).coerceAtLeast(context.dp(24))
+        })
+        var cancelling = false
+        return { event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    val next = (first + ((touchY - event.rawY) / context.dp(12)).roundToInt()).coerceIn(values.indices)
+                    if (next != wheel.value) {
+                        wheel.value = next
+                        chip.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                    cancelling = abs(event.rawX - touchX) > context.dp(72)
+                    floating.alpha = if (cancelling) 0.45f else 1f
+                    hint.text = if (cancelling) "Let go to cancel" else HOLD_START
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    onEnded()
+                    root.removeView(floating)
+                    if (event.actionMasked == MotionEvent.ACTION_UP && !cancelling) {
+                        store.minutes = values[wheel.value]
+                        val minutes = store.minutes
+                        close { onMeditate(minutes) }
+                    }
+                }
+            }
+        }
     }
 
     // The bookshelf

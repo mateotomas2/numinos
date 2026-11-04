@@ -23,6 +23,7 @@ import android.window.OnBackInvokedDispatcher
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.NumberPicker
 import android.widget.TextView
 import kotlin.math.cos
 import kotlin.math.min
@@ -123,6 +124,21 @@ fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or I
         addView(field)
     }
     return box to field
+}
+
+/** The minutes the timer offers. 0 means no timer. */
+val DURATIONS = listOf(0) + (1..10) + (15..60 step 5) + (75..120 step 15)
+
+fun durationLabel(minutes: Int) = if (minutes == 0) "∞" else "$minutes min"
+
+/** A native wheel over [values]. Its value is an index into them. */
+fun Context.durationWheel(values: List<Int>, minutes: Int) = NumberPicker(ContextThemeWrapper(this, dialogTheme())).apply {
+    minValue = 0
+    maxValue = values.lastIndex
+    displayedValues = values.map { if (it == 0) "∞  no timer" else durationLabel(it) }.toTypedArray()
+    value = values.indexOf(minutes).coerceAtLeast(0)
+    wrapSelectorWheel = false
+    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS // Keeps the keyboard away.
 }
 
 /** A symbol and the theme and book that go with it. */
