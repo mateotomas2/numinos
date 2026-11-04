@@ -251,6 +251,14 @@ class MainActivity : Activity() {
             store.symbolVisible = on
             if (on) OverlayService.start(this) else OverlayService.stop(this)
         }
+        toggle("Hide when an app is full screen", store.bubbleHidesInFullScreen) {
+            store.bubbleHidesInFullScreen = it
+            OverlayService.refresh(this)
+        }
+        slider("Size", store.bubbleSizeDp, 8, 64, { "$it dp" }) {
+            store.bubbleSizeDp = it
+            OverlayService.refresh(this)
+        }
         slider("Opacity", store.bubbleOpacity, 20, 100, { "$it%" }) {
             store.bubbleOpacity = it
             OverlayService.refresh(this)

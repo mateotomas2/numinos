@@ -14,7 +14,7 @@ Requires Android 8.0 or newer.
 - **Meditation:** tap Meditate to start with your last duration. Tap the duration to choose another on a wheel, or hold it, drag and let go to set it and start in one move. Choose ∞ to sit with no timer, which ends when you end it or after 2 hours. There's an opening and closing bell. During a sit the screen stays on and dimmed in front of your altar, and a tap shows the time left. You can let the screen sleep in Settings.
 - **Altar:** arrange your own with the Altar button. Drag a candle, incense, a singing bowl, a gong, a lotus, a leaf, stones, your symbol, text, the timer or a PNG up from the tray. Drag to move, use two fingers to rotate or resize, and drag to the trash to remove. Touching the bowl or gong rings it, even during a sit.
 - **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
-- **Settings:** change the theme, choose light or dark (it follows your system by default), set the symbol's opacity and its offset from the edge, or delete everything and start over.
+- **Settings:** change the theme, choose light or dark (it follows your system by default), set the symbol's size, opacity and offset from the edge, hide it while an app is full screen, or delete everything and start over.
 
 ## Add your own
 

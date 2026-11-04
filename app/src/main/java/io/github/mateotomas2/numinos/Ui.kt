@@ -245,6 +245,9 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
         }
     var discColor = symbol.palette.ink.toInt()
     var markColor = symbol.palette.paper.toInt()
+    /** When set, the symbol is drawn this size at [markX], vertically centered, in a larger touch area. */
+    var markSize = 0
+    var markX = 0
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val box = RectF()
@@ -254,7 +257,9 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val c = min(width, height) / 2f
+        val size = if (markSize > 0) markSize else min(width, height)
+        if (markSize > 0) canvas.translate(markX.toFloat(), (height - size) / 2f)
+        val c = size / 2f
         paint.style = Paint.Style.FILL
         paint.color = discColor
         canvas.drawCircle(c, c, c, paint)

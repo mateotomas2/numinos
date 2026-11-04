@@ -387,6 +387,14 @@ class Store private constructor(context: Context) {
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit().putBoolean("onboarded", value).apply()
 
+    var bubbleSizeDp: Int
+        get() = prefs.getInt("bubbleSizeDp", 54)
+        set(value) = prefs.edit().putInt("bubbleSizeDp", value).apply()
+
+    var bubbleHidesInFullScreen: Boolean
+        get() = prefs.getBoolean("bubbleHidesInFullScreen", true)
+        set(value) = prefs.edit().putBoolean("bubbleHidesInFullScreen", value).apply()
+
     var bubbleOpacity: Int
         get() = prefs.getInt("bubbleOpacity", 88)
         set(value) = prefs.edit().putInt("bubbleOpacity", value).apply()
