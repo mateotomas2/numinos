@@ -2,9 +2,12 @@ package io.github.mateotomas2.numinos
 
 import android.app.Activity
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -18,11 +21,13 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.random.Random
 
-/** Arranges the altar: tap the tray to add, drag to move, two fingers to rotate and resize, drag to the trash to remove. */
+/** Arranges the altar: drag from the tray to add, drag to move, two fingers to rotate and resize, drag to the trash to remove. */
 class AltarActivity : Activity() {
     private lateinit var store: Store
     private lateinit var altar: AltarView
     private lateinit var trash: ImageView
+    private lateinit var tray: LinearLayout
+    private lateinit var root: FrameLayout
 
     private var active: AltarItem? = null
     private var lastX = 0f
@@ -31,6 +36,8 @@ class AltarActivity : Activity() {
     private var lastAngle = 0f
     private var travelled = 0f
     private var twoFingers = false
+    private var dropX = 0.5f
+    private var dropY = 0.45f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,16 +54,14 @@ class AltarActivity : Activity() {
             isClickable = false
             visibility = View.INVISIBLE
         }
-        val tray = LinearLayout(this).apply {
+        tray = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(PAPER)
-            addView(row(AltarBackground.entries.map { backdrop ->
-                backdrop.label to { chooseBackdrop(backdrop) }
-            }))
-            addView(row(ADDABLE.map { kind -> kind.label to { addKind(kind) } }))
+            setBackgroundColor(TRAY)
+            addView(shelf(ADDABLE.map { kind -> widget(kind) }))
+            addView(shelf(AltarBackground.entries.map { backdrop -> backdropTile(backdrop) }))
         }
         val done = chip("Done", true) { finish() }
-        val root = FrameLayout(this).apply {
+        root = FrameLayout(this).apply {
             addView(altar, FrameLayout.LayoutParams(-1, -1))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -101,15 +106,98 @@ class AltarActivity : Activity() {
         OverlayService.refresh(this)
     }
 
-    private fun row(entries: List<Pair<String, () -> Unit>>) = HorizontalScrollView(this).apply {
+    private fun shelf(tiles: List<View>) = HorizontalScrollView(this).apply {
         isHorizontalScrollBarEnabled = false
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(10), dp(4), dp(10), dp(4))
-            entries.forEach { (name, action) ->
-                addView(chip(name, false, action), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
-            }
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            tiles.forEach { addView(it) }
         })
+    }
+
+    /** What an element looks like in the tray and under your finger. */
+    private fun picture(kind: AltarKind): View = when (kind) {
+        AltarKind.SYMBOL -> ImageView(this).apply { setImageResource(Look.symbol.medallion) }
+        AltarKind.TEXT -> label("Aa", 30f, PALE_INK, serif = true).apply { gravity = Gravity.CENTER }
+        AltarKind.TIMER -> label(altar.timerText, 20f, PALE_INK, serif = true).apply { gravity = Gravity.CENTER }
+        AltarKind.IMAGE -> ImageView(this).apply {
+            setImageResource(R.drawable.ic_add)
+            imageTintList = ColorStateList.valueOf(PALE_INK)
+            scaleType = ImageView.ScaleType.CENTER
+            background = rounded(0x22FFFFFF, dp(14).toFloat(), dp(1), 0x55FFFFFF)
+        }
+        else -> ElementView(this, kind, alive = false)
+    }
+
+    /** Drag it up onto the altar, or tap to place it in the middle. Sideways scrolls the tray. */
+    private fun widget(kind: AltarKind) = FrameLayout(this).apply {
+        contentDescription = "Add ${kind.label}"
+        layoutParams = LinearLayout.LayoutParams(dp(76), dp(76)).apply { marginEnd = dp(4) }
+        setPadding(dp(5), dp(5), dp(5), dp(5))
+        addView(picture(kind), FrameLayout.LayoutParams(-1, -1))
+        val slop = ViewConfiguration.get(context).scaledTouchSlop
+        var downX = 0f
+        var downY = 0f
+        var ghost: View? = null
+        var tapping = false
+        setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = event.rawX
+                    downY = event.rawY
+                    tapping = true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val up = downY - event.rawY
+                    val across = abs(event.rawX - downX)
+                    if (up > slop || across > slop) tapping = false
+                    if (ghost == null && up > slop && up > across) {
+                        parent.requestDisallowInterceptTouchEvent(true)
+                        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        ghost = picture(kind).also {
+                            root.addView(it, FrameLayout.LayoutParams(altar.elementSize, altar.elementSize))
+                        }
+                    }
+                    ghost?.let { moveGhost(it, event.rawX, event.rawY) }
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dropped = ghost
+                    ghost = null
+                    if (dropped != null) {
+                        val x = dropped.translationX + dropped.width / 2f
+                        val y = dropped.translationY + dropped.height / 2f
+                        root.removeView(dropped)
+                        if (event.rawY < trayTop()) addKind(kind, x / altar.width, y / altar.height)
+                    } else if (tapping) {
+                        addKind(kind, 0.5f + Random.nextFloat() * 0.2f - 0.1f, 0.42f + Random.nextFloat() * 0.2f - 0.1f)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    ghost?.let(root::removeView)
+                    ghost = null
+                }
+            }
+            true
+        }
+    }
+
+    /** The element rides above the finger, so you can see where it's going. */
+    private fun moveGhost(ghost: View, x: Float, y: Float) {
+        ghost.translationX = x - altar.elementSize / 2f
+        ghost.translationY = y - altar.elementSize - dp(24)
+        ghost.alpha = if (y < trayTop()) 1f else 0.5f
+    }
+
+    private fun trayTop() = IntArray(2).also(tray::getLocationOnScreen)[1]
+
+    private fun backdropTile(backdrop: AltarBackground) = ImageView(this).apply {
+        setImageResource(backdrop.image)
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        contentDescription = "${backdrop.label} background"
+        clipToOutline = true
+        background = rounded(Color.BLACK, dp(8).toFloat())
+        layoutParams = LinearLayout.LayoutParams(dp(62), dp(40)).apply { marginEnd = dp(8) }
+        tappable { chooseBackdrop(backdrop) }
     }
 
     private fun chooseBackdrop(backdrop: AltarBackground) {
@@ -117,7 +205,9 @@ class AltarActivity : Activity() {
         altar.setBackdrop(backdrop)
     }
 
-    private fun addKind(kind: AltarKind) {
+    private fun addKind(kind: AltarKind, x: Float, y: Float) {
+        dropX = x
+        dropY = y
         when (kind) {
             AltarKind.TEXT -> askForText()
             AltarKind.IMAGE -> startActivityForResult(
@@ -128,9 +218,9 @@ class AltarActivity : Activity() {
         }
     }
 
-    /** New things land near the middle, a little apart so they don't hide each other. */
+    /** Text and images land where they were dropped, once they've been chosen. */
     private fun place(kind: AltarKind, content: String = "") {
-        val item = AltarItem(kind, 0.5f + Random.nextFloat() * 0.2f - 0.1f, 0.42f + Random.nextFloat() * 0.2f - 0.1f, content = content)
+        val item = AltarItem(kind, dropX, dropY, content = content)
         if (altar.add(item) != null) store.saveAltar(altar.items())
     }
 
@@ -268,6 +358,7 @@ class AltarActivity : Activity() {
 
         private const val PICK_IMAGE = 1
         private const val PALE_INK = 0xFFF6F1E7.toInt()
+        private const val TRAY = 0xF0141210.toInt()
         private val ADDABLE = listOf(
             AltarKind.CANDLE, AltarKind.INCENSE, AltarKind.BOWL, AltarKind.GONG, AltarKind.FLOWER, AltarKind.LEAF,
             AltarKind.STONE, AltarKind.SYMBOL, AltarKind.TEXT, AltarKind.TIMER, AltarKind.IMAGE,
