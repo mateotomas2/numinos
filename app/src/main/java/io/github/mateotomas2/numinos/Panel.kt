@@ -9,6 +9,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.SystemClock
 import android.text.InputType
 import android.text.TextUtils
 import android.transition.ChangeBounds
@@ -35,6 +36,9 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
+
+private const val BACK_REPEAT_MS = 200L
+private const val BACK_ANNOUNCE_MS = 700L
 
 private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
 
@@ -86,6 +90,7 @@ class Panel(
     val isSuspended get() = suspended
     private var foundBooks: List<FoundEpub>? = null
     private var searching = false
+    private var lastBackAt = -BACK_ANNOUNCE_MS
     private val windowParams = WindowManager.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -170,7 +175,14 @@ class Panel(
         root.animate().alpha(1f).setStartDelay(0).setDuration(220).start()
     }
 
+    /** True just after a back press, when a system "close" announcement is that same press and not Home. */
+    fun backJustHandled() = SystemClock.uptimeMillis() - lastBackAt < BACK_ANNOUNCE_MS
+
     private fun goBack() {
+        // Some phones deliver one press both as a key and as a gesture, which would skip a page.
+        val now = SystemClock.uptimeMillis()
+        if (now - lastBackAt < BACK_REPEAT_MS) return
+        lastBackAt = now
         when {
             pill != null -> dismissPill()
             arranging != null -> arrange(null)
@@ -774,6 +786,11 @@ class Panel(
             }
             start()
         }
+        addView(context.chip("Altar", false) {
+            AltarActivity.isOpen = true // Keeps the symbol from flashing up as this window closes.
+            context.startActivity(Intent(context, AltarActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            close()
+        })
         addView(durationChip(), LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
     }
 

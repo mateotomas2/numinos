@@ -38,8 +38,11 @@
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="image/png" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".AltarActivity" android:exported="false" />
 
         <activity
             android:name=".BookImportActivity"

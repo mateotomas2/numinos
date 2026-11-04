@@ -6,7 +6,9 @@ import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -17,6 +19,10 @@ import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
@@ -126,6 +132,57 @@ fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or I
     return box to field
 }
 
+/** A window above other apps that covers the whole screen, including around a camera cutout. */
+fun wholeScreenParams(extraFlags: Int = 0) = WindowManager.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or extraFlags,
+    PixelFormat.TRANSLUCENT,
+).apply {
+    if (Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    if (Build.VERSION.SDK_INT >= 30) fitInsetsTypes = 0
+}
+
+fun Window.useWholeScreen() {
+    if (Build.VERSION.SDK_INT >= 28) {
+        attributes = attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
+    }
+    if (Build.VERSION.SDK_INT >= 30) setDecorFitsSystemWindows(false)
+}
+
+/** Hides the status and navigation bars. A swipe from the edge shows them for a moment. */
+fun View.hideSystemBars() {
+    if (Build.VERSION.SDK_INT >= 30) {
+        windowInsetsController?.apply {
+            systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsets.Type.systemBars())
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+    }
+}
+
+/** How far content must stay from each edge to clear any bars still showing and the camera cutout. */
+@Suppress("DEPRECATION")
+fun screenEdges(insets: WindowInsets): Rect {
+    val edges = Rect(
+        insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
+        insets.systemWindowInsetRight, insets.systemWindowInsetBottom,
+    )
+    if (Build.VERSION.SDK_INT >= 28) {
+        insets.displayCutout?.let {
+            edges.left = maxOf(edges.left, it.safeInsetLeft)
+            edges.top = maxOf(edges.top, it.safeInsetTop)
+            edges.right = maxOf(edges.right, it.safeInsetRight)
+            edges.bottom = maxOf(edges.bottom, it.safeInsetBottom)
+        }
+    }
+    return edges
+}
+
 /** The minutes the timer offers. 0 means no timer. */
 val DURATIONS = listOf(0) + (1..10) + (15..60 step 5) + (75..120 step 15)
 
@@ -188,6 +245,9 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
         }
     var discColor = symbol.palette.ink.toInt()
     var markColor = symbol.palette.paper.toInt()
+    /** When set, the symbol is drawn this size at [markX], vertically centered, in a larger touch area. */
+    var markSize = 0
+    var markX = 0
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val box = RectF()
@@ -197,7 +257,9 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val c = min(width, height) / 2f
+        val size = if (markSize > 0) markSize else min(width, height)
+        if (markSize > 0) canvas.translate(markX.toFloat(), (height - size) / 2f)
+        val c = size / 2f
         paint.style = Paint.Style.FILL
         paint.color = discColor
         canvas.drawCircle(c, c, c, paint)

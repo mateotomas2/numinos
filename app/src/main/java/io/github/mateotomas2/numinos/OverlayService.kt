@@ -16,13 +16,17 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Point
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
@@ -38,11 +42,23 @@ class OverlayService : Service() {
     private var panel: Panel? = null
     private var meditation: Meditation? = null
     private var readerOpen = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var fullScreenWatcher: View? = null
+    private var appIsFullScreen = false
 
     /** Android announces the Home and Recents gestures this way; the window closes for them. */
     private val homeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            panel?.close()
+            val reason = intent.getStringExtra("reason")
+            if (reason == "homekey" || reason == "recentapps") {
+                panel?.close()
+                return
+            }
+            // Some phones announce their back gesture this way too, so give that press time to arrive.
+            val shown = panel ?: return
+            handler.postDelayed({
+                if (panel === shown && !shown.backJustHandled()) shown.close()
+            }, 300)
         }
     }
 
@@ -91,9 +107,10 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        watchFullScreen()
         // If you left a permission screen some other way, the waiting window shouldn't keep the symbol hidden.
         if (intent?.action == null && !readerOpen) panel?.takeIf { it.isSuspended }?.close()
-        if (meditation == null && panel == null && !readerOpen) showBubble()
+        if (meditation == null && panel == null && !readerOpen && !AltarActivity.isOpen) showBubble()
         return START_STICKY
     }
 
@@ -110,6 +127,9 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         unregisterReceiver(homeReceiver)
+        handler.removeCallbacksAndMessages(null)
+        fullScreenWatcher?.let { runCatching { windows.removeView(it) } }
+        fullScreenWatcher = null
         meditation?.release()
         panel?.dismissNow()
         removeBubble()
@@ -126,7 +146,63 @@ class OverlayService : Service() {
 
     // Floating symbol
 
-    private fun bubbleSize() = dp(54)
+    /** The window you touch. It never gets too small to hit, however small the mark inside it is. */
+    private fun bubbleSize() = maxOf(dp(store.bubbleSizeDp) + maxOf(dp(store.bubbleOffsetDp), 0), dp(MIN_TOUCH_DP))
+
+    private fun hiddenForFullScreen() = store.bubbleHidesInFullScreen && appIsFullScreen
+
+    /** Places the mark against its edge. A tucked-in mark always keeps some of itself on screen. */
+    private fun placeMark(view: SymbolView) {
+        val size = dp(store.bubbleSizeDp)
+        val offset = maxOf(dp(store.bubbleOffsetDp), -size * 3 / 5)
+        view.markSize = size
+        view.markX = if (store.bubbleOnLeft) offset else bubbleSize() - size - offset
+        view.invalidate()
+    }
+
+    /**
+     * An invisible strip that tells us when the system bars go away, which is how apps show
+     * full-screen video. Android doesn't let this app ask what's on screen in any other way.
+     */
+    private fun watchFullScreen() {
+        if (fullScreenWatcher != null) return
+        val view = View(this)
+        view.setOnApplyWindowInsetsListener { _, insets ->
+            onFullScreenChanged(barsHidden(insets))
+            insets
+        }
+        val params = WindowManager.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 1,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP
+            alpha = 0f
+            if (Build.VERSION.SDK_INT >= 30) fitInsetsTypes = 0
+        }
+        windows.addView(view, params)
+        fullScreenWatcher = view
+    }
+
+    private fun barsHidden(insets: WindowInsets): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) {
+            !insets.isVisible(WindowInsets.Type.statusBars())
+        } else {
+            @Suppress("DEPRECATION")
+            (insets.systemWindowInsetTop == 0)
+        }
+
+    private fun onFullScreenChanged(hidden: Boolean) {
+        if (appIsFullScreen == hidden) return
+        appIsFullScreen = hidden
+        if (hiddenForFullScreen()) {
+            removeBubble()
+        } else if (meditation == null && panel == null && !readerOpen && !AltarActivity.isOpen) {
+            showBubble()
+        }
+    }
 
     private fun screenSize(): Point {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -141,23 +217,26 @@ class OverlayService : Service() {
     private fun idleAlpha() = store.bubbleOpacity / 100f
 
     private fun restingX(): Int {
-        val offset = dp(store.bubbleOffsetDp)
-        return if (store.bubbleOnLeft) offset else screenSize().x - bubbleSize() - offset
+        return if (store.bubbleOnLeft) 0 else screenSize().x - bubbleSize()
     }
 
     /** Applies changed settings straight away, so the sliders work as a live preview. */
     private fun refreshBubble() {
+        if (hiddenForFullScreen()) removeBubble()
         val view = bubble ?: return
         val params = bubbleParams ?: return
         view.animate().cancel()
         view.symbol = Symbol.of(store.symbolId)
         view.alpha = idleAlpha()
+        params.width = bubbleSize()
+        params.height = bubbleSize()
         params.x = restingX()
+        placeMark(view)
         windows.updateViewLayout(view, params)
     }
 
     private fun showBubble() {
-        if (bubble != null) return
+        if (bubble != null || hiddenForFullScreen()) return
         val params = WindowManager.LayoutParams(
             bubbleSize(), bubbleSize(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -174,6 +253,7 @@ class OverlayService : Service() {
             scaleY = 0.4f
             elevation = dp(4).toFloat()
         }
+        placeMark(view)
         addBubbleTouch(view, params)
         windows.addView(view, params)
         bubble = view
@@ -227,6 +307,7 @@ class OverlayService : Service() {
         view.alpha = idleAlpha()
         store.bubbleOnLeft = params.x + bubbleSize() / 2 < screenSize().x / 2
         store.bubbleY = params.y
+        (view as? SymbolView)?.let(::placeMark)
         ValueAnimator.ofInt(params.x, restingX()).apply {
             duration = 260
             interpolator = DecelerateInterpolator()
@@ -253,13 +334,13 @@ class OverlayService : Service() {
 
     private fun onPanelClosed() {
         panel = null
-        if (meditation == null && !readerOpen) showBubble()
+        if (meditation == null && !readerOpen && !AltarActivity.isOpen) showBubble()
     }
 
     // Meditation
 
     private fun startMeditation(minutes: Int) {
-        val session = Meditation(this, windows, Symbol.of(store.symbolId), minutes) {
+        val session = Meditation(this, windows, store, minutes) {
             meditation = null
             startInForeground(presenceNotification())
             showBubble()
@@ -301,6 +382,7 @@ class OverlayService : Service() {
 
     companion object {
         private const val CHANNEL = "presence"
+        private const val MIN_TOUCH_DP = 48
         private const val NOTIFICATION = 1
         private const val ACTION_HIDE = "hide"
         private const val ACTION_END = "end"
