@@ -213,10 +213,12 @@ class Store private constructor(context: Context) {
     @Synchronized
     fun videos(): List<Video> {
         val items = JSONArray(prefs.getString("videos", "[]"))
-        return List(items.length()) { i ->
+        val videos = List(items.length()) { i ->
             val item = items.getJSONObject(i)
             Video(item.getString("id"), item.getString("title"), item.getString("category"), item.getLong("lastUsed"))
-        }.sortedByDescending { it.lastUsed }
+        }
+        // Lists saved by older versions have no order of their own until they're next saved.
+        return if (prefs.getBoolean("videosOrdered", false)) videos else videos.sortedByDescending { it.lastUsed }
     }
 
     private fun saveVideos(videos: List<Video>) {
@@ -224,21 +226,31 @@ class Store private constructor(context: Context) {
         videos.forEach {
             items.put(JSONObject().put("id", it.id).put("title", it.title).put("category", it.category).put("lastUsed", it.lastUsed))
         }
-        prefs.edit().putString("videos", items.toString()).apply()
+        prefs.edit().putString("videos", items.toString()).putBoolean("videosOrdered", true).apply()
     }
 
     @Synchronized
     fun addVideo(id: String, category: String) {
         val old = videos().firstOrNull { it.id == id }
-        saveVideos(videos().filter { it.id != id } + Video(id, old?.title.orEmpty(), category, System.currentTimeMillis()))
+        saveVideos(listOf(Video(id, old?.title.orEmpty(), category, System.currentTimeMillis())) + videos().filter { it.id != id })
+        videoCategory = category.ifEmpty { null }
+        videoScroll = 0
     }
 
     @Synchronized
     fun setVideoTitle(id: String, title: String) = saveVideos(videos().map { if (it.id == id) it.copy(title = title) else it })
 
     @Synchronized
-    fun markVideoUsed(id: String) =
-        saveVideos(videos().map { if (it.id == id) it.copy(lastUsed = System.currentTimeMillis()) else it })
+    fun setVideoCategory(id: String, category: String) = saveVideos(videos().map { if (it.id == id) it.copy(category = category) else it })
+
+    /** Puts the videos in [order] into the places they already hold, so a filtered list leaves the others where they are. */
+    @Synchronized
+    fun arrangeVideos(order: List<String>) {
+        val all = videos()
+        val byId = all.associateBy { it.id }
+        val next = order.iterator()
+        saveVideos(all.map { if (it.id in order) byId.getValue(next.next()) else it })
+    }
 
     @Synchronized
     fun removeVideo(id: String) = saveVideos(videos().filter { it.id != id })
@@ -274,6 +286,19 @@ class Store private constructor(context: Context) {
     var minutes: Int
         get() = prefs.getInt("minutes", 10)
         set(value) = prefs.edit().putInt("minutes", value).apply()
+
+    /** The category last chosen in the floating window; null shows them all. */
+    var videoCategory: String?
+        get() = prefs.getString("videoCategory", null)
+        set(value) = prefs.edit().putString("videoCategory", value).apply()
+
+    var videoScroll: Int
+        get() = prefs.getInt("videoScroll", 0)
+        set(value) = prefs.edit().putInt("videoScroll", value).apply()
+
+    var chipScroll: Int
+        get() = prefs.getInt("chipScroll", 0)
+        set(value) = prefs.edit().putInt("chipScroll", value).apply()
 
     var bubbleOnLeft: Boolean
         get() = prefs.getBoolean("bubbleOnLeft", false)

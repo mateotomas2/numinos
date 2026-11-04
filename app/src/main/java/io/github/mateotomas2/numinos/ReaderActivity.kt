@@ -89,8 +89,13 @@ class ReaderActivity : AppCompatActivity() {
             elevation = dp(14).toFloat()
             clipToOutline = true
             isClickable = true // Touches on the card must not reach the scrim and close it.
-            addView(header())
+            addView(label(book.title, 13f, SOFT, serif = true).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(dp(16), dp(10), dp(16), dp(4))
+            }, LinearLayout.LayoutParams(-1, -2))
             addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(controls(), LinearLayout.LayoutParams(-1, -2))
         }
         return FrameLayout(this).apply {
             setOnClickListener { finish() }
@@ -98,18 +103,21 @@ class ReaderActivity : AppCompatActivity() {
         }
     }
 
-    private fun header() = LinearLayout(this).apply {
+    /** All the reader's buttons sit at the bottom, within reach of one hand. */
+    private fun controls() = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(6), dp(6), dp(6), dp(2))
-        addView(iconButton(R.drawable.ic_back, "Back") { goBack() }, LinearLayout.LayoutParams(dp(44), dp(44)))
-        addView(label(book.title, 18f, INK, serif = true).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, -2, 1f))
-        addView(textButton("A−", "Smaller text", -0.1), LinearLayout.LayoutParams(dp(40), dp(42)))
-        addView(textButton("A+", "Larger text", 0.1), LinearLayout.LayoutParams(dp(40), dp(42)))
+        setPadding(dp(6), dp(4), dp(6), dp(6))
+        background = rounded(CARD, 0f)
+        elevation = dp(4).toFloat()
+        addView(iconButton(R.drawable.ic_back, "Back") { goBack() }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        addView(View(this@ReaderActivity), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(textButton("A−", "Smaller text", -0.1), LinearLayout.LayoutParams(dp(48), dp(48)))
+        addView(textButton("A+", "Larger text", 0.1), LinearLayout.LayoutParams(dp(48), dp(48)))
         if (book.marks.isNotEmpty()) {
-            addView(iconButton(R.drawable.ic_mark, "Next marked passage", SOFT) { jumpToNextMark() }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            addView(iconButton(R.drawable.ic_mark, "Next marked passage", SOFT) { jumpToNextMark() }, LinearLayout.LayoutParams(dp(48), dp(48)))
         }
-        addView(iconButton(R.drawable.ic_list, "Contents", SOFT) { showContents() }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        addView(iconButton(R.drawable.ic_list, "Contents", SOFT) { showContents() }, LinearLayout.LayoutParams(dp(48), dp(48)))
     }
 
     private fun textButton(name: String, description: String, change: Double) = label(name, 15f, INK, serif = true).apply {

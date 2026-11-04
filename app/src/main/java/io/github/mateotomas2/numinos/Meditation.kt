@@ -20,7 +20,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.Locale
 
-/** One sit: a bell, a breathing symbol and a countdown, then a closing bell. */
+/** One sit: a bell, a breathing symbol and a countdown, then a closing bell. With 0 minutes it counts up until ended. */
 class Meditation(
     private val context: Context,
     private val windows: WindowManager,
@@ -28,7 +28,9 @@ class Meditation(
     minutes: Int,
     private val onDone: () -> Unit,
 ) {
-    val endsAtElapsed = SystemClock.elapsedRealtime() + minutes * 60_000L
+    val untimed = minutes == 0
+    val startedAtElapsed = SystemClock.elapsedRealtime()
+    val endsAtElapsed = startedAtElapsed + (if (untimed) UNTIMED_LIMIT_MINUTES else minutes) * 60_000L
     private val handler = Handler(Looper.getMainLooper())
     private val wakeLock = (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
         .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "numinos:meditation")
@@ -53,8 +55,7 @@ class Meditation(
                 finish(completed = true)
                 return
             }
-            val seconds = (left + 999) / 1000
-            countdown.text = String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
+            countdown.text = if (untimed) elapsedClock() else clock((left + 999) / 1000)
             handler.postDelayed(this, 250)
         }
     }
@@ -130,12 +131,12 @@ class Meditation(
         if (finished) return
         finished = true
         handler.removeCallbacksAndMessages(null)
-        if (!completed) {
+        if (!completed && !untimed) {
             close()
             return
         }
         ring()
-        countdown.text = "0:00"
+        countdown.text = if (untimed) elapsedClock() else "0:00"
         hint.text = "Complete"
         hint.animate().alpha(1f).setDuration(600).start()
         handler.postDelayed({ close() }, 7000)
@@ -164,6 +165,10 @@ class Meditation(
         if (wakeLock.isHeld) wakeLock.release()
     }
 
+    private fun elapsedClock() = clock((SystemClock.elapsedRealtime() - startedAtElapsed) / 1000)
+
+    private fun clock(seconds: Long) = String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
+
     private fun ring() {
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM)
@@ -174,5 +179,10 @@ class Meditation(
             setOnCompletionListener { it.release() }
             start()
         }
+    }
+
+    private companion object {
+        /** A forgotten sit with no timer ends by itself, so it can't hold the wake lock for good. */
+        const val UNTIMED_LIMIT_MINUTES = 120
     }
 }

@@ -17,6 +17,7 @@ import android.transition.TransitionManager
 import android.transition.TransitionSet
 import android.view.ContextThemeWrapper
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -31,9 +32,13 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
+
+private const val HOLD_START = "Let go to start, slide sideways to cancel"
 
 private val SPINE_COLORS = mapOf(
     "tao" to 0xFF3F7D68.toInt(),
@@ -55,7 +60,10 @@ class Panel(
     private val context = ContextThemeWrapper(serviceContext, android.R.style.Theme_Material_Light_NoActionBar)
     private val pad = context.dp(16)
     private var sentence: Sentence? = store.sentenceToShow()
-    private var category: String? = null
+    private var category: String? = store.videoCategory
+    private var videoScroll = store.videoScroll
+    private var chipScroll = store.chipScroll
+    private var arranging: String? = null
     private var closing = false
     private var breath: ValueAnimator? = null
     private val openDialogs = mutableListOf<AlertDialog>()
@@ -146,12 +154,16 @@ class Panel(
             windows.addView(root, windowParams)
             root.onBackGesture { goBack() }
         }
+        // The window is redrawn so the tilted book stands straight and anything kept while reading shows up.
+        store.pinned()?.let { sentence = it }
+        render()
         root.animate().alpha(1f).setStartDelay(0).setDuration(220).start()
     }
 
     private fun goBack() {
         when {
             pill != null -> dismissPill()
+            arranging != null -> arrange(null)
             backStack.isNotEmpty() -> {
                 page = backStack.removeLast()
                 morph()
@@ -161,6 +173,7 @@ class Panel(
     }
 
     private fun navigate(target: Page) {
+        arranging = null
         backStack.addLast(page)
         page = target
         morph()
@@ -193,6 +206,9 @@ class Panel(
     fun dismissNow() {
         closing = true
         BookLoader.listener = null
+        store.videoCategory = category
+        store.videoScroll = videoScroll
+        store.chipScroll = chipScroll
         breath?.cancel()
         openDialogs.forEach { runCatching { it.dismiss() } }
         runCatching { windows.removeView(root) }
@@ -273,11 +289,20 @@ class Panel(
         layoutParams = LinearLayout.LayoutParams(-1, context.dp(1))
     }
 
-    private fun horizontal(content: LinearLayout) = HorizontalScrollView(context).apply {
+    /** Opens at [startX], once the content has a size to scroll over, and reports where it's moved to. */
+    private fun horizontal(content: LinearLayout, startX: Int = 0, onScrolled: (Int) -> Unit = {}) = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         clipToPadding = false
         addView(content)
+        addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, oldL: Int, oldT: Int, oldR: Int, oldB: Int) {
+                removeOnLayoutChangeListener(this)
+                scrollTo(startX, 0)
+                setOnScrollChangeListener { _, x, _, _, _ -> onScrolled(x) }
+                onScrolled(scrollX)
+            }
+        })
     }
 
     private fun sourceLine(item: Sentence?) =
@@ -391,7 +416,9 @@ class Panel(
 
     // The floating actions
 
-    private fun showPill(item: Sentence) {
+    private fun showPill(item: Sentence) = showPill { fillPill(it, item) }
+
+    private fun showPill(fill: (LinearLayout) -> Unit) {
         dismissPill()
         val shown = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -400,7 +427,7 @@ class Panel(
             background = rounded(CARD, context.dp(26).toFloat(), context.dp(1), LINE)
             elevation = context.dp(18).toFloat()
         }
-        fillPill(shown, item)
+        fill(shown)
         shown.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val origin = IntArray(2)
         root.getLocationOnScreen(origin)
@@ -420,14 +447,15 @@ class Panel(
     }
 
     /** Every action closes the pill, in every place it appears. */
+    private fun LinearLayout.addAction(icon: Int, description: String, tint: Int = INK, action: () -> Unit) {
+        addView(context.iconButton(icon, description, tint) {
+            dismissPill()
+            action()
+        }, LinearLayout.LayoutParams(context.dp(46), context.dp(46)))
+    }
+
     private fun fillPill(shown: LinearLayout, item: Sentence) {
-        val size = context.dp(46)
-        fun add(icon: Int, description: String, tint: Int = INK, action: () -> Unit) {
-            shown.addView(context.iconButton(icon, description, tint) {
-                dismissPill()
-                action()
-            }, LinearLayout.LayoutParams(size, size))
-        }
+        fun add(icon: Int, description: String, tint: Int = INK, action: () -> Unit) = shown.addAction(icon, description, tint, action)
         if (page == Page.HOME) {
             add(R.drawable.ic_another, "Another sentence") {
                 store.setPinned(null)
@@ -488,10 +516,19 @@ class Panel(
         val all = store.videos()
         val categories = store.categories()
         if (category !in categories) category = null
+        val shown = all.filter { category == null || it.category == category }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, context.dp(10), 0, context.dp(12))
-            if (categories.size > 1 || (categories.size == 1 && all.any { it.category.isEmpty() })) {
+            if (arranging != null) {
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(pad, 0, pad, context.dp(10))
+                    addView(context.label("Drag the outlined video", 13f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(context.chip("Done", true) { arrange(null) })
+                })
+            } else if (categories.size > 1 || (categories.size == 1 && all.any { it.category.isEmpty() })) {
                 val chips = LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(pad, 0, pad, context.dp(10))
@@ -499,12 +536,13 @@ class Panel(
                 fun add(name: String, value: String?) {
                     chips.addView(context.chip(name, category == value) {
                         category = value
+                        videoScroll = 0
                         refreshHomeVideos()
                     }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = context.dp(6) })
                 }
                 add("All", null)
                 categories.forEach { add(it, it) }
-                addView(horizontal(chips))
+                addView(horizontal(chips, chipScroll) { chipScroll = it })
             }
             val tiles = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -512,13 +550,18 @@ class Panel(
                 isBaselineAligned = false
                 setPadding(pad, 0, pad, 0)
             }
-            all.filter { category == null || it.category == category }.forEach { tiles.addView(videoTile(it)) }
-            tiles.addView(addVideoButton())
-            addView(horizontal(tiles))
+            shown.forEach { tiles.addView(videoTile(it, shown.size)) }
+            if (arranging == null) tiles.addView(addVideoButton())
+            val scroller = horizontal(tiles, videoScroll) { videoScroll = it }
+            addView(scroller)
+            for (i in 0 until tiles.childCount) {
+                val tile = tiles.getChildAt(i)
+                if (tile.tag == arranging) dragAlong(tile, tiles, scroller)
+            }
         }
     }
 
-    private fun videoTile(video: Video): View {
+    private fun videoTile(video: Video, neighbours: Int): View {
         val thumb = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = video.title
@@ -540,24 +583,111 @@ class Panel(
             addView(shade, FrameLayout.LayoutParams(-1, context.dp(56), Gravity.BOTTOM))
             addView(title, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             layoutParams = LinearLayout.LayoutParams(context.dp(138), context.dp(78)).apply { marginEnd = context.dp(10) }
-            tappable {
-                store.markVideoUsed(video.id)
-                YouTube.open(context, video.id)
-                close()
+            tag = video.id
+            if (arranging == null) {
+                tappable {
+                    YouTube.open(context, video.id)
+                    close()
+                }
+                setOnLongClickListener {
+                    showPill { fillVideoPill(it, video, neighbours) }
+                    true
+                }
+            } else if (arranging == video.id) {
+                addView(View(context).apply {
+                    background = rounded(Color.TRANSPARENT, context.dp(12).toFloat(), context.dp(3), ACCENT)
+                }, FrameLayout.LayoutParams(-1, -1))
+            } else {
+                alpha = 0.55f
+                tappable { arrange(video.id) }
             }
-            setOnLongClickListener {
-                context.dialogBuilder()
-                    .setTitle(video.title.ifEmpty { "YouTube video" })
-                    .setMessage("Remove this video from your practice list?")
-                    .setPositiveButton("Remove") { _, _ ->
-                        store.removeVideo(video.id)
-                        refreshHomeVideos()
-                    }
-                    .setNegativeButton("Keep", null)
-                    .create()
-                    .showInPanel()
-                true
+        }
+    }
+
+    private fun fillVideoPill(shown: LinearLayout, video: Video, neighbours: Int) {
+        if (neighbours > 1) shown.addAction(R.drawable.ic_rearrange, "Rearrange") { arrange(video.id) }
+        shown.addAction(R.drawable.ic_category, "Change category") {
+            chooseCategory(context, store, { it.showInPanel() }) { name ->
+                store.setVideoCategory(video.id, name)
+                refreshHomeVideos()
             }
+        }
+        shown.addAction(R.drawable.ic_delete, "Remove") {
+            context.dialogBuilder()
+                .setTitle(video.title.ifEmpty { "YouTube video" })
+                .setMessage("Remove this video from your practice list?")
+                .setPositiveButton("Remove") { _, _ ->
+                    store.removeVideo(video.id)
+                    refreshHomeVideos()
+                }
+                .setNegativeButton("Keep", null)
+                .create()
+                .showInPanel()
+        }
+    }
+
+    /** Lifts one video out of the row to be dragged, or puts the row back to normal when given null. */
+    private fun arrange(id: String?) {
+        arranging = id
+        refreshHomeVideos()
+    }
+
+    /** The tile follows the finger, the row scrolls when it nears an edge, and letting go saves the order. */
+    private fun dragAlong(tile: View, row: LinearLayout, scroller: HorizontalScrollView) {
+        val edge = context.dp(48)
+        var fingerX = 0f
+
+        fun place(move: Float) {
+            tile.translationX = (tile.translationX + move).coerceIn(-tile.left.toFloat(), (row.width - tile.right).toFloat())
+            // Children keep their old positions until the next layout, so wait for it before comparing them.
+            if (row.isLayoutRequested) return
+            val center = tile.left + tile.translationX + tile.width / 2
+            val index = row.indexOfChild(tile)
+            val neighbour = row.getChildAt(if (tile.translationX > 0) index + 1 else index - 1) ?: return
+            if (tile.translationX > 0 == center > neighbour.left + neighbour.width / 2) {
+                val step = (neighbour.left - tile.left).toFloat()
+                row.removeView(neighbour)
+                row.addView(neighbour, index)
+                tile.translationX -= step
+                neighbour.translationX = step
+                neighbour.animate().translationX(0f).setDuration(160).start()
+            }
+        }
+
+        val autoScroll = object : Runnable {
+            override fun run() {
+                val at = IntArray(2)
+                scroller.getLocationOnScreen(at)
+                val speed = when {
+                    fingerX < at[0] + edge -> -context.dp(6)
+                    fingerX > at[0] + scroller.width - edge -> context.dp(6)
+                    else -> 0
+                }
+                val before = scroller.scrollX
+                scroller.scrollBy(speed, 0)
+                if (scroller.scrollX != before) place((scroller.scrollX - before).toFloat())
+                scroller.postOnAnimation(this)
+            }
+        }
+
+        tile.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    fingerX = event.rawX
+                    scroller.requestDisallowInterceptTouchEvent(true)
+                    scroller.postOnAnimation(autoScroll)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    place(event.rawX - fingerX)
+                    fingerX = event.rawX
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    scroller.removeCallbacks(autoScroll)
+                    tile.animate().translationX(0f).setDuration(160).start()
+                    store.arrangeVideos(List(row.childCount) { row.getChildAt(it).tag as String })
+                }
+            }
+            true
         }
     }
 
@@ -588,6 +718,8 @@ class Panel(
     private fun pickCategory(id: String) {
         chooseCategory(context, store, { it.showInPanel() }) { name ->
             store.addVideo(id, name)
+            category = store.videoCategory
+            videoScroll = 0
             YouTube.fetchTitle(context, id) { refreshHomeVideos() }
             refreshHomeVideos()
         }
@@ -631,35 +763,93 @@ class Panel(
             }
             start()
         }
-        val options = (listOf(5, 10, 20) + store.minutes).distinct().sorted()
-        options.forEach { minutes ->
-            addView(context.chip("$minutes", minutes == store.minutes) {
-                store.minutes = minutes
-                refreshHomeVideos()
-            }.apply { minimumWidth = context.dp(38); setPadding(context.dp(8), 0, context.dp(8), 0) },
-                LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
-        }
-        addView(context.chip("…", false) { promptMinutes() }.apply {
-            contentDescription = "Other duration"
-            minimumWidth = context.dp(34)
-            setPadding(context.dp(6), 0, context.dp(6), 0)
-        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
+        addView(durationChip(), LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
     }
 
-    private fun promptMinutes() {
-        val (box, field) = context.dialogField("Minutes", InputType.TYPE_CLASS_NUMBER)
+    /** Tap to choose on the wheel. Hold to set it with one drag and start on letting go. */
+    private fun durationChip() = context.chip(durationLabel(store.minutes), false) { promptDuration() }.apply {
+        contentDescription = if (store.minutes == 0) "No timer. Change duration" else "${store.minutes} minutes. Change duration"
+        minimumWidth = context.dp(58)
+        var whileHeld: ((MotionEvent) -> Unit)? = null
+        setOnLongClickListener {
+            if (!isPressed) return@setOnLongClickListener false // Accessibility services long-click with no finger to follow.
+            isPressed = false
+            parent.requestDisallowInterceptTouchEvent(true)
+            whileHeld = holdToStart(this) { whileHeld = null }
+            true
+        }
+        setOnTouchListener { _, event ->
+            whileHeld?.let { it(event); true } ?: false
+        }
+    }
+
+    private fun durationChoices() = (DURATIONS + store.minutes).distinct().sorted()
+
+    private fun promptDuration() {
+        val values = durationChoices()
+        val wheel = context.durationWheel(values, store.minutes)
+        val box = FrameLayout(context).apply {
+            addView(wheel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        }
         context.dialogBuilder()
-            .setTitle("How many minutes?")
+            .setTitle("How long?")
             .setView(box)
-            .setPositiveButton("Set") { _, _ ->
-                field.text.toString().toIntOrNull()?.takeIf { it in 1..600 }?.let {
-                    store.minutes = it
-                    refreshHomeVideos()
-                }
+            .setPositiveButton("Start") { _, _ ->
+                store.minutes = values[wheel.value]
+                val minutes = store.minutes
+                close { onMeditate(minutes) }
             }
-            .setNegativeButton("Cancel", null)
+            .setOnCancelListener {
+                store.minutes = values[wheel.value]
+                refreshHomeVideos()
+            }
             .create()
             .showInPanel()
+    }
+
+    /** Shows the wheel above the finger and returns what handles the rest of the touch. */
+    private fun holdToStart(chip: View, onEnded: () -> Unit): (MotionEvent) -> Unit {
+        val values = durationChoices()
+        val wheel = context.durationWheel(values, store.minutes)
+        val first = wheel.value
+        val hint = context.label(HOLD_START, 12f, SOFT).apply { gravity = Gravity.CENTER }
+        val floating = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(CARD, context.dp(20).toFloat())
+            elevation = context.dp(24).toFloat()
+            setPadding(context.dp(20), context.dp(8), context.dp(20), context.dp(12))
+            addView(wheel)
+            addView(hint, LinearLayout.LayoutParams(-2, -2).apply { topMargin = context.dp(4) })
+        }
+        val rootTop = IntArray(2).also { root.getLocationOnScreen(it) }[1]
+        root.addView(floating, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = (touchY.toInt() - rootTop - context.dp(290)).coerceAtLeast(context.dp(24))
+        })
+        var cancelling = false
+        return { event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    val next = (first + ((touchY - event.rawY) / context.dp(12)).roundToInt()).coerceIn(values.indices)
+                    if (next != wheel.value) {
+                        wheel.value = next
+                        chip.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                    cancelling = abs(event.rawX - touchX) > context.dp(72)
+                    floating.alpha = if (cancelling) 0.45f else 1f
+                    hint.text = if (cancelling) "Let go to cancel" else HOLD_START
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    onEnded()
+                    root.removeView(floating)
+                    if (event.actionMasked == MotionEvent.ACTION_UP && !cancelling) {
+                        store.minutes = values[wheel.value]
+                        val minutes = store.minutes
+                        close { onMeditate(minutes) }
+                    }
+                }
+            }
+        }
     }
 
     // The bookshelf
@@ -832,12 +1022,24 @@ class Panel(
         items.forEachIndexed { index, item ->
             rows.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(context.dp(14), context.dp(12), context.dp(14), context.dp(12))
+                setPadding(context.dp(14), context.dp(12), context.dp(if (tilted) 6 else 14), context.dp(if (tilted) 4 else 12))
                 background = rounded(CARD, context.dp(if (tilted) 3 else 12).toFloat(), context.dp(1), LINE)
                 if (tilted) rotation = if (index % 2 == 0) -0.9f else 0.9f
                 addView(context.label(item.text, 16f, INK, serif = true).apply { setLineSpacing(0f, 1.16f) })
                 val source = if (item.bookId == null) "" else sourceLine(item)
-                if (source.isNotEmpty()) addView(context.label(source, 11.5f, SOFT).apply { setPadding(0, context.dp(6), 0, 0) })
+                if (tilted) {
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(context.label(source, 11.5f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+                        addView(context.iconButton(R.drawable.ic_delete, "Remove from jar", SOFT) {
+                            store.toggleLiked(item)
+                            render()
+                        }, LinearLayout.LayoutParams(context.dp(40), context.dp(40)))
+                    })
+                } else if (source.isNotEmpty()) {
+                    addView(context.label(source, 11.5f, SOFT).apply { setPadding(0, context.dp(6), 0, 0) })
+                }
                 tappable {
                     sentence = item
                     returnHome()
