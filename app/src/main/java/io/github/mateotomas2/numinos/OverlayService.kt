@@ -64,7 +64,7 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startInForeground(meditation?.let { meditationNotification(it.endsAtElapsed) } ?: presenceNotification())
+        startInForeground(meditation?.let { meditationNotification(it) } ?: presenceNotification())
         when (intent?.action) {
             ACTION_HIDE -> {
                 store.symbolVisible = false
@@ -250,7 +250,7 @@ class OverlayService : Service() {
             showBubble()
         }
         meditation = session
-        startInForeground(meditationNotification(session.endsAtElapsed))
+        startInForeground(meditationNotification(session))
         session.start()
     }
 
@@ -274,10 +274,13 @@ class OverlayService : Service() {
         .addAction(action("Hide", ACTION_HIDE))
         .build()
 
-    private fun meditationNotification(endsAtElapsed: Long) = baseNotification("Meditating")
+    private fun meditationNotification(session: Meditation) = baseNotification("Meditating")
         .setUsesChronometer(true)
-        .setChronometerCountDown(true)
-        .setWhen(System.currentTimeMillis() + (endsAtElapsed - SystemClock.elapsedRealtime()))
+        .setChronometerCountDown(!session.untimed)
+        .setWhen(
+            System.currentTimeMillis() +
+                ((if (session.untimed) session.startedAtElapsed else session.endsAtElapsed) - SystemClock.elapsedRealtime()),
+        )
         .addAction(action("End", ACTION_END))
         .build()
 

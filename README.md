@@ -11,7 +11,7 @@ Requires Android 8.0 or newer.
 - **Sentence:** shows a random line from marked passages in the books, your liked passages and your own sentences, or one you fix in place. Tap it to open the library, tap its title to open the book at that passage, and long-press it for more actions.
 - **Library:** a bookshelf with the full text of all four books, a notebook for your sentences and a jar for passages you like. Books remember your place and have adjustable text.
 - **Videos:** keeps your YouTube practice videos, in categories you create and the order you choose. It reopens on the category and place you left. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
-- **Meditation:** runs a countdown with an opening and closing bell, and keeps going with the screen locked.
+- **Meditation:** tap Meditate to start with your last duration. Tap the duration to choose another on a wheel, or hold it, drag and let go to set it and start in one move. Choose ∞ to sit with no timer, which ends when you end it or after 2 hours. There's an opening and closing bell, and it keeps going with the screen locked.
 - **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
 - **Settings:** change the theme, choose light or dark (it follows your system by default), set the symbol's opacity and its offset from the edge, or delete everything and start over.
 
