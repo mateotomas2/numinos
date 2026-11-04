@@ -14,7 +14,7 @@ android {
         minSdk = 26 // Android 8.0, for phones from about 2017-2018 onward
         targetSdk = 36
         versionCode = System.getenv("VERSION_CODE")?.toInt() ?: 1
-        versionName = "0.1.0" // Raise this in every PR: merging publishes it as a final release.
+        versionName = "0.2.0" // Raise this in every PR: merging publishes it as a final release.
         versionNameSuffix = System.getenv("VERSION_SUFFIX")
     }
 

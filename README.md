@@ -8,7 +8,8 @@ Requires Android 8.0 or newer.
 
 ## What it does
 
-- **Sentence:** shows a random line from the books and your own sentences, or one you fix in place. Tap it to open the library. Long-press it to get another, like it or fix it.
+- **Sentence:** shows a random line from marked passages in the books, your liked passages and your own sentences, or one you fix in place. Tap it to open the library, tap its title to open the book at that passage, and long-press it for more actions.
+- **Library:** a bookshelf with the full text of all four books, a notebook for your sentences and a jar for passages you like. Books remember your place and have adjustable text.
 - **Videos:** keeps your YouTube practice videos, in categories you create, with the last one first. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
 - **Meditation:** runs a countdown with an opening and closing bell, and keeps going with the screen locked.
 - **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
@@ -17,8 +18,8 @@ Requires Android 8.0 or newer.
 ## Add your own
 
 - **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap + in the floating window and paste a link.
-- **A sentence:** tap the sentence, choose My sentences and tap +. You can also share selected text from any app to NuminOS.
-- **Remove something:** long-press a video or one of your sentences.
+- **A sentence:** tap the sentence, open the notebook and tap +. You can also share selected text from any app to NuminOS.
+- **Remove something:** long-press a video to remove it, or long-press one of your sentences and tap delete.
 
 ## Install
 
@@ -37,7 +38,7 @@ If the symbol disappears after a while, set the app's battery use to **Unrestric
 | Dhammapada | F. Max Müller (1881) | [Project Gutenberg](https://www.gutenberg.org/ebooks/2017) |
 | Bible | World English Bible | [eBible.org](https://ebible.org/) |
 
-These are short selections, cut directly from the sources by `tools/make_books.py`. To change them, edit the lists in that script and run it again.
+The full texts are generated from these sources by `tools/make_books.py`, which also marks a selection of passages for random sentences. To change the marks, edit the lists in that script and run it again. The Upanishads source covers the Isa, Katha and Kena, and its commentary is shown in a quieter style.
 
 ## Build
 

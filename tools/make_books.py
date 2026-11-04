@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Builds app/src/main/assets/books from the public-domain source texts.
 
-Every sentence is cut directly out of its source, so nothing here is retyped
-and any phrase that isn't found stops the build.
+Each book becomes a folder holding book.json (its contents and marked passages)
+and one file per chapter. Nothing is retyped: marked passages are cut out of the
+parsed chapters, and any passage not found where it's claimed to be stops the build.
 
 usage: make_books.py TAO.txt DHAMMAPADA.txt UPANISHADS.txt WEB_VPL.txt OUT_DIR
 
@@ -13,6 +14,7 @@ usage: make_books.py TAO.txt DHAMMAPADA.txt UPANISHADS.txt WEB_VPL.txt OUT_DIR
 """
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -79,8 +81,27 @@ BIBLE = {
 }
 
 
+BIBLE_BOOKS = {
+    "GEN": "Genesis", "EXO": "Exodus", "LEV": "Leviticus", "NUM": "Numbers", "DEU": "Deuteronomy",
+    "JOS": "Joshua", "JDG": "Judges", "RUT": "Ruth", "1SA": "1 Samuel", "2SA": "2 Samuel",
+    "1KI": "1 Kings", "2KI": "2 Kings", "1CH": "1 Chronicles", "2CH": "2 Chronicles", "EZR": "Ezra",
+    "NEH": "Nehemiah", "EST": "Esther", "JOB": "Job", "PSA": "Psalm", "PRO": "Proverbs",
+    "ECC": "Ecclesiastes", "SOL": "Song of Solomon", "ISA": "Isaiah", "JER": "Jeremiah",
+    "LAM": "Lamentations", "EZE": "Ezekiel", "DAN": "Daniel", "HOS": "Hosea", "JOE": "Joel",
+    "AMO": "Amos", "OBA": "Obadiah", "JON": "Jonah", "MIC": "Micah", "NAH": "Nahum", "HAB": "Habakkuk",
+    "ZEP": "Zephaniah", "HAG": "Haggai", "ZEC": "Zechariah", "MAL": "Malachi", "MAT": "Matthew",
+    "MAR": "Mark", "LUK": "Luke", "JOH": "John", "ACT": "Acts", "ROM": "Romans", "1CO": "1 Corinthians",
+    "2CO": "2 Corinthians", "GAL": "Galatians", "EPH": "Ephesians", "PHI": "Philippians",
+    "COL": "Colossians", "1TH": "1 Thessalonians", "2TH": "2 Thessalonians", "1TI": "1 Timothy",
+    "2TI": "2 Timothy", "TIT": "Titus", "PHM": "Philemon", "HEB": "Hebrews", "JAM": "James",
+    "1PE": "1 Peter", "2PE": "2 Peter", "1JO": "1 John", "2JO": "2 John", "3JO": "3 John",
+    "JUD": "Jude", "REV": "Revelation",
+}
+
 # Where a verse's first words are a heading or belong to the sentence before it.
 BIBLE_START_AT = {"PSA 23:1": "The LORD", "LUK 17:21": "God’s Kingdom"}
+
+PART_NUMBERS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6}
 
 
 def clean(text):
@@ -88,22 +109,13 @@ def clean(text):
 
 
 def read(path):
-    return Path(path).read_text(encoding="utf-8").replace("\r\n", "\n")
+    source = Path(path).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+    return source.split("*** END OF THE PROJECT GUTENBERG")[0]
 
 
 def phrase(words):
     """Matches words across the source's line breaks and double spaces."""
     return re.compile(r"\s+".join(re.escape(word) for word in words.split()))
-
-
-def span(source, start, end, what):
-    first = phrase(start).search(source)
-    if not first:
-        sys.exit(f"{what}: not found: {start}")
-    last = phrase(end).search(source, first.start())
-    if not last or last.start() - first.start() > 700:
-        sys.exit(f"{what}: no ending near: {start} ... {end}")
-    return first.start(), clean(source[first.start():last.end()]).rstrip(",;")
 
 
 def roman(numeral):
@@ -114,12 +126,64 @@ def roman(numeral):
     return total
 
 
+def fail(message):
+    sys.exit(f"make_books: {message}")
+
+
+def tidy(raw):
+    """Joins wrapped prose but keeps the line breaks of indented poetry."""
+    out = []
+    for paragraph in re.split(r"\n\s*\n", raw):
+        lines = [line for line in paragraph.split("\n") if line.strip()]
+        if not lines:
+            continue
+        if any(line.startswith("  ") for line in lines):
+            out.append("\n".join(clean(line) for line in lines))
+        else:
+            out.append(clean(paragraph))
+    return "\n\n".join(out)
+
+
+def numbered_passages(body, first):
+    """Splits text at the line-start numbers first, first + 1, ... and returns (passages, next number)."""
+    passages = []
+    expected = first
+    position = 0
+    label = ""
+    while True:
+        # Some verses share one paragraph, printed as "58, 59."
+        found = re.compile(rf"^{expected}(?:, (\d+))?\.(?:\s|$)", re.M).search(body, position)
+        text = tidy(body[position:found.start() if found else len(body)])
+        if text:
+            passages.append({"l": label, "t": text})
+        if not found:
+            return passages, expected
+        last = int(found.group(1) or expected)
+        label = f"{expected}, {last}" if found.group(1) else str(expected)
+        position = found.end()
+        expected = last + 1
+
+
+def excerpt(text, start, end, what):
+    first = phrase(start).search(text)
+    if not first:
+        return None
+    last = phrase(end).search(text, first.start())
+    if not last:
+        fail(f"{what}: no ending near: {start} ... {end}")
+    return first.start(), last.end()
+
+
+def as_sentence(text):
+    text = clean(text).rstrip(",;")
+    return text[0].upper() + text[1:]
+
+
 def tao(path):
-    source = read(path)
-    # Verses inside a chapter are numbered too: a chapter normally opens "N. 1."
-    # and single-verse chapters (always past 5) open "N. Text". Used only to
-    # confirm that each chapter number claimed above is right.
-    starts = {}
+    source = re.sub(r"^PART .*$", "", read(path), flags=re.M)
+    source = source[source.index("Ch. 1. 1."):]
+    # A chapter normally opens "N. 1." and single-verse chapters (always past 5) "N. Text".
+    starts = []
     position = 0
     for chapter in range(1, 82):
         found = re.compile(rf"^(?:Ch\. )?{chapter}\.\s+1\.", re.M).search(source, position)
@@ -127,82 +191,195 @@ def tao(path):
         if chapter > 5 and single and (not found or single.start() < found.start()):
             found = single
         if not found:
-            print(f"check Tao: chapter {chapter} heading not found")
-            continue
-        starts[chapter] = found.start()
+            fail(f"Tao: chapter {chapter} heading not found")
+        starts.append(found)
         position = found.end()
-    out = []
+    chapters = []
+    for index, found in enumerate(starts):
+        heading_end = re.compile(r"(?:Ch\. )?\d+\.\s*").match(source, found.start()).end()
+        stop = starts[index + 1].start() if index < 80 else len(source)
+        passages, _ = numbered_passages(source[heading_end:stop], 1)
+        # A chapter with verses starts with an empty slot before "1."; drop nothing else.
+        chapters.append({"title": f"Chapter {index + 1}", "passages": passages})
+    marks = []
     for chapter, start, end in TAO:
-        begin, text = span(source, start, end, "Tao")
-        actual = max((c for c, at in starts.items() if at <= begin), default=None)
-        if actual != chapter:
-            print(f"check Tao chapter: {chapter} vs {actual}: {start}")
-        out.append({"ref": f"Chapter {chapter}", "text": text[0].upper() + text[1:]})
-    # Two sentences from one chapter need distinct references.
-    seen = {}
-    for item in out:
-        seen[item["ref"]] = seen.get(item["ref"], 0) + 1
-        if seen[item["ref"]] > 1:
-            item["ref"] += f" ({seen[item['ref']]})"
-    return out
+        for number, passage in enumerate(chapters[chapter - 1]["passages"]):
+            span = excerpt(passage["t"], start, end, "Tao")
+            if span:
+                text = as_sentence(passage["t"][span[0]:span[1]])
+                marks.append({"ref": f"Chapter {chapter}", "text": text, "chapter": chapter - 1,
+                              "passage": number, "start": span[0], "end": span[1]})
+                break
+        else:
+            fail(f"Tao: not in chapter {chapter}: {start}")
+    return chapters, marks
 
 
 def dhammapada(path):
     source = read(path)
-    out = []
+    headings = list(re.finditer(r"^Chapter ([IVXL]+)\. (.+)$", source, re.M))
+    chapters = []
+    expected = 1
+    for index, heading in enumerate(headings):
+        stop = headings[index + 1].start() if index + 1 < len(headings) else len(source)
+        passages, expected = numbered_passages(source[heading.end():stop], expected)
+        chapters.append({"title": f"Chapter {roman(heading.group(1))}: {clean(heading.group(2))}", "passages": passages})
+    if expected != 424:
+        fail(f"Dhammapada: stopped at verse {expected}")
+    marks = []
     for verse, start, end in DHAMMAPADA:
-        begin, text = span(source, f"{verse}. {start}", end, "Dhammapada")
-        out.append({"ref": f"Verse {verse}", "text": text.split(" ", 1)[1]})
-    return out
+        for c, chapter in enumerate(chapters):
+            for p, passage in enumerate(chapter["passages"]):
+                if passage["l"] == str(verse):
+                    span = excerpt(passage["t"], start, end, "Dhammapada") or fail(f"Dhammapada: not in verse {verse}: {start}")
+                    marks.append({"ref": f"Verse {verse}", "text": as_sentence(passage["t"][span[0]:span[1]]),
+                                  "chapter": c, "passage": p, "start": span[0], "end": span[1]})
+    if len(marks) != len(DHAMMAPADA):
+        fail("Dhammapada: a marked verse is missing")
+    return chapters, marks
+
+
+def upanishad_passages(section, name, chapters):
+    """In this source a verse is the paragraph right under its Roman numeral, then commentary follows."""
+    current = None
+    expect_verse = False
+    in_chant = False
+    label = ""
+
+    def open_chapter(title):
+        chapters.append({"title": title, "passages": []})
+        return chapters[-1]["passages"]
+
+    has_parts = re.search(r"^\s*Part first\s*$", section, re.M | re.I)
+    if not has_parts:
+        current = open_chapter(f"{name} Upanishad")
+    pending = []
+    for raw in re.split(r"\n\s*\n", section):
+        paragraph = clean(raw)
+        if not paragraph or paragraph.endswith("-Upanishad") or paragraph == name.upper() + "-UPANISHAD":
+            continue
+        part = re.fullmatch(r"Part (\w+)", paragraph, re.I)
+        if part and part.group(1).lower() in PART_NUMBERS:
+            current = open_chapter(f"{name} Upanishad, Part {PART_NUMBERS[part.group(1).lower()]}")
+            current[:0] = pending
+            pending = []
+            continue
+        target = current if current is not None else pending
+        if paragraph.lower() == "peace chant":
+            in_chant = True
+            continue
+        if in_chant:
+            target.append({"l": "Peace Chant", "t": paragraph})
+            in_chant = not paragraph.upper().startswith("OM!") or "PEACE" not in paragraph.upper()
+            continue
+        if re.fullmatch(r"[IVXL]+", paragraph):
+            label = str(roman(paragraph))
+            expect_verse = True
+            continue
+        if expect_verse:
+            target.append({"l": label, "t": paragraph})
+            expect_verse = False
+        else:
+            target.append({"l": "", "t": paragraph, "c": 1})
 
 
 def upanishads(path):
     source = read(path)
-    out = []
+    chapters = []
+    isa = source.index("Isa-Upanishad", source.index("Isa-Upanishad", source.index("Introduction", 3000)) + 20)
+    isa_end = source.index("Here ends this Upanishad", isa)
+    upanishad_passages(source[isa:isa_end], "Isa", chapters)
+    katha_note = source.index("Katha-Upanishad", isa_end)
+    katha = source.index("Katha-Upanishad", katha_note + 20)
+    katha_end = source.index("Here ends this Upanishad", katha)
+    upanishad_passages(source[katha:katha_end], "Katha", chapters)
+    kena = source.index("KENA-UPANISHAD", katha_end)
+    upanishad_passages(source[kena:source.index("Here ends this Upanishad", kena)], "Kena", chapters)
+    marks = []
     for ref, start in UPANISHADS:
-        found = phrase(start).search(source)
-        if not found:
-            sys.exit(f"Upanishads: not found: {start}")
-        begin = found.start()
-        stop = source.find("\n\n", begin)
-        # The source prints each verse number as a Roman numeral above the verse.
-        numeral = re.findall(r"^([IVXL]+)$", source[:begin], re.M)[-1]
-        if roman(numeral) != int(ref.rsplit(" ", 1)[1]):
-            sys.exit(f"Upanishads: {ref} is verse {numeral} in the source")
-        out.append({"ref": ref, "text": clean(source[begin:stop])})
-    return out
+        name, *middle, verse_label = ref.split(", ")
+        title = f"{name} Upanishad" + (f", Part {middle[0].split()[1]}" if middle else "")
+        verse = verse_label.split()[1]
+        index = next((i for i, c in enumerate(chapters) if c["title"] == title), None)
+        if index is None:
+            fail(f"Upanishads: no chapter {title}")
+        for p, passage in enumerate(chapters[index]["passages"]):
+            if passage["l"] == verse and not passage.get("c"):
+                if not phrase(start).match(passage["t"]):
+                    fail(f"Upanishads: {ref} doesn't start with: {start}")
+                marks.append({"ref": ref, "text": passage["t"], "chapter": index, "passage": p,
+                              "start": 0, "end": len(passage["t"])})
+                break
+        else:
+            fail(f"Upanishads: {ref} not found")
+    return chapters, marks
 
 
 def bible(path):
-    verses = {}
+    chapters = []
+    index_of = {}
     for line in Path(path).read_text(encoding="utf-8-sig").splitlines():
         parts = line.split(" ", 2)
-        if len(parts) == 3:
-            verses[f"{parts[0]} {parts[1]}"] = parts[2]
-    out = []
-    for code, name in BIBLE.items():
-        text = clean(verses[code])
-        if code in BIBLE_START_AT:
-            text = text[text.index(BIBLE_START_AT[code]):]
-        # A lone verse shouldn't carry its neighbours' quotation marks or punctuation.
-        text = text.strip("“”").rstrip(":")
-        if text[-1] not in ".!?":
-            text += "."
-        out.append({"ref": name, "text": text[0].upper() + text[1:]})
-    return out
+        if len(parts) != 3 or parts[0] not in BIBLE_BOOKS:
+            continue
+        code, place, text = parts
+        chapter, verse = place.split(":")
+        key = f"{code} {chapter}"
+        if key not in index_of:
+            index_of[key] = len(chapters)
+            chapters.append({"title": f"{BIBLE_BOOKS[code]} {chapter}", "passages": []})
+        if clean(text):
+            chapters[index_of[key]]["passages"].append({"l": verse, "t": clean(text)})
+    marks = []
+    for code, ref in BIBLE.items():
+        key, verse = code.rsplit(":", 1)
+        index = index_of[key]
+        for p, passage in enumerate(chapters[index]["passages"]):
+            if passage["l"] == verse:
+                raw = passage["t"]
+                start = raw.index(BIBLE_START_AT[code]) if code in BIBLE_START_AT else 0
+                # A lone verse shouldn't carry its neighbours' quotation marks or punctuation.
+                while raw[start] == "“":
+                    start += 1
+                end = len(raw)
+                while raw[end - 1] in "”:":
+                    end -= 1
+                text = raw[start:end]
+                if text[-1] not in ".!?":
+                    text += "."
+                marks.append({"ref": ref, "text": text[0].upper() + text[1:], "chapter": index, "passage": p,
+                              "start": start, "end": end})
+                break
+        else:
+            fail(f"Bible: {ref} not found")
+    return chapters, marks
 
 
-def write(out_dir, file, book_id, title, credit, sentences):
-    if len({s["ref"] for s in sentences}) != len(sentences):
-        sys.exit(f"{title}: duplicate references")
-    book = {"id": book_id, "title": title, "credit": credit, "sentences": sentences}
-    Path(out_dir, file).write_text(json.dumps(book, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"{title}: {len(sentences)}")
+def write(out_dir, shelf, book_id, title, credit, parsed):
+    chapters, marks = parsed
+    folder = Path(out_dir, book_id)
+    folder.mkdir(parents=True)
+    book = {"id": book_id, "title": title, "credit": credit, "shelf": shelf,
+            "chapters": [c["title"] for c in chapters], "marks": marks}
+    (folder / "book.json").write_text(json.dumps(book, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    for index, chapter in enumerate(chapters):
+        if not chapter["passages"]:
+            fail(f"{title}: {chapter['title']} is empty")
+        (folder / f"c{index}.json").write_text(
+            json.dumps(chapter["passages"], ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    passages = sum(len(c["passages"]) for c in chapters)
+    print(f"{title}: {len(chapters)} chapters, {passages} passages, {len(marks)} marks")
 
 
 if __name__ == "__main__":
     tao_path, dham_path, upa_path, web_path, out_dir = sys.argv[1:6]
-    write(out_dir, "tao.json", "tao", "Tao Te Ching", "translated by James Legge (1891), public domain", tao(tao_path))
-    write(out_dir, "upanishads.json", "upanishads", "Upanishads", "translated by Swami Paramananda (1919), public domain", upanishads(upa_path))
-    write(out_dir, "dhammapada.json", "dhammapada", "Dhammapada", "translated by F. Max Müller (1881), public domain", dhammapada(dham_path))
-    write(out_dir, "bible.json", "bible", "Bible", "World English Bible, public domain", bible(web_path))
+    out = Path(out_dir)
+    if out.parts[-2:] != ("assets", "books"):
+        fail("OUT_DIR must end in assets/books, because it's replaced")
+    parsed = [tao(tao_path), upanishads(upa_path), dhammapada(dham_path), bible(web_path)]
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    write(out, 0, "tao", "Tao Te Ching", "translated by James Legge (1891), public domain", parsed[0])
+    write(out, 1, "upanishads", "Upanishads", "translated by Swami Paramananda (1919), public domain", parsed[1])
+    write(out, 2, "dhammapada", "Dhammapada", "translated by F. Max Müller (1881), public domain", parsed[2])
+    write(out, 3, "bible", "Bible", "World English Bible, public domain", parsed[3])

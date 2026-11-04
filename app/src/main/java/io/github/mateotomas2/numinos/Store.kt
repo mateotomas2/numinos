@@ -8,13 +8,49 @@ import java.io.File
 import java.util.UUID
 
 const val SOURCE_MINE = "mine"
+const val SOURCE_JAR = "jar"
 const val MINE_TITLE = "My sentences"
 const val DARK_MODE_SYSTEM = "system"
 const val DARK_MODE_LIGHT = "light"
 const val DARK_MODE_DARK = "dark"
 
-data class Book(val id: String, val title: String, val credit: String, val sentences: List<Sentence>)
-data class Sentence(val key: String, val text: String, val source: String, val ref: String)
+data class Book(
+    val id: String,
+    val title: String,
+    val credit: String,
+    val shelf: Int,
+    val chapters: List<String>,
+    val marks: List<Sentence>,
+)
+
+data class Passage(val label: String, val text: String, val commentary: Boolean)
+
+/** A line to show: from a book when [bookId] is set, otherwise written by you. */
+data class Sentence(
+    val key: String,
+    val text: String,
+    val source: String,
+    val ref: String,
+    val bookId: String? = null,
+    val chapter: Int = -1,
+    val passage: Int = -1,
+    val start: Int = -1,
+    val end: Int = -1,
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("key", key).put("text", text).put("source", source).put("ref", ref)
+        .put("bookId", bookId).put("chapter", chapter).put("passage", passage)
+        .put("start", start).put("end", end)
+
+    companion object {
+        fun fromJson(json: JSONObject) = Sentence(
+            json.getString("key"), json.getString("text"), json.getString("source"), json.getString("ref"),
+            json.optString("bookId").ifEmpty { null }, json.optInt("chapter", -1), json.optInt("passage", -1),
+            json.optInt("start", -1), json.optInt("end", -1),
+        )
+    }
+}
+
 data class Video(val id: String, val title: String, val category: String, val lastUsed: Long)
 
 /** Everything the app remembers. It all stays on the phone. */
@@ -37,18 +73,65 @@ class Store private constructor(context: Context) {
     }
 
     val books: List<Book> by lazy {
-        app.assets.list("books").orEmpty().sorted().map { file ->
-            val json = JSONObject(app.assets.open("books/$file").bufferedReader().use { it.readText() })
+        app.assets.list("books").orEmpty().map { folder ->
+            val json = JSONObject(readAsset("books/$folder/book.json"))
             val id = json.getString("id")
             val title = json.getString("title")
-            val items = json.getJSONArray("sentences")
-            Book(id, title, json.getString("credit"), List(items.length()) { i ->
-                val item = items.getJSONObject(i)
-                val ref = item.getString("ref")
-                Sentence("$id:$ref", item.getString("text"), title, ref)
-            })
+            val chapters = json.getJSONArray("chapters")
+            val marks = json.getJSONArray("marks")
+            Book(
+                id, title, json.getString("credit"), json.getInt("shelf"),
+                List(chapters.length()) { chapters.getString(it) },
+                List(marks.length()) { i ->
+                    val mark = marks.getJSONObject(i)
+                    val chapter = mark.getInt("chapter")
+                    val passage = mark.getInt("passage")
+                    val start = mark.getInt("start")
+                    Sentence(
+                        "$id:m:$chapter:$passage:$start", mark.getString("text"), title, mark.getString("ref"),
+                        id, chapter, passage, start, mark.getInt("end"),
+                    )
+                },
+            )
+        }.sortedBy { it.shelf }
+    }
+
+    private fun readAsset(path: String) = app.assets.open(path).bufferedReader().use { it.readText() }
+
+    fun book(id: String?): Book? = books.firstOrNull { it.id == id }
+
+    /** One chapter's text, read only when it's opened because the books are large. */
+    fun chapter(bookId: String, index: Int): List<Passage> {
+        val items = JSONArray(readAsset("books/$bookId/c$index.json"))
+        return List(items.length()) { i ->
+            val item = items.getJSONObject(i)
+            Passage(item.getString("l"), item.getString("t"), item.optInt("c") == 1)
         }
     }
+
+    /** A whole verse or paragraph as a sentence, for liking or fixing it from the reader. */
+    fun passageSentence(book: Book, chapter: Int, index: Int, passage: Passage): Sentence {
+        val title = book.chapters[chapter]
+        val ref = when {
+            passage.label.isEmpty() -> title
+            book.id == "bible" -> "$title:${passage.label}"
+            passage.label.first().isDigit() -> "$title, verse ${passage.label}"
+            else -> "$title, ${passage.label}"
+        }
+        return Sentence("${book.id}:p:$chapter:$index", passage.text, book.title, ref, book.id, chapter, index)
+    }
+
+    fun place(bookId: String): Pair<Int, Int> {
+        val parts = prefs.getString("place_$bookId", null)?.split(":") ?: return 0 to 0
+        return parts[0].toInt() to parts[1].toInt()
+    }
+
+    fun setPlace(bookId: String, chapter: Int, passage: Int) =
+        prefs.edit().putString("place_$bookId", "$chapter:$passage").apply()
+
+    var readerTextSp: Int
+        get() = prefs.getInt("readerTextSp", 18)
+        set(value) = prefs.edit().putInt("readerTextSp", value).apply()
 
     // Sentences
 
@@ -79,11 +162,8 @@ class Store private constructor(context: Context) {
             if ("$SOURCE_MINE:${item.getString("id")}" != key) kept.put(item)
         }
         prefs.edit().putString("mine", kept.toString()).apply()
-        if (pinnedKey == key) pinnedKey = null
-        if (key in likedKeys()) toggleLiked(key)
+        if (pinned()?.key == key) setPinned(null)
     }
-
-    fun allSentences(): List<Sentence> = mySentences() + books.flatMap { it.sentences }
 
     fun isSourceOn(id: String) = id !in prefs.getStringSet("sourcesOff", emptySet()).orEmpty()
 
@@ -93,28 +173,47 @@ class Store private constructor(context: Context) {
         prefs.edit().putStringSet("sourcesOff", off).apply()
     }
 
+    private fun allMarks() = books.flatMap { it.marks }
+
     fun randomSentence(excludeKey: String? = null): Sentence? {
-        val on = (if (isSourceOn(SOURCE_MINE)) mySentences() else emptyList()) +
-            books.filter { isSourceOn(it.id) }.flatMap { it.sentences }
-        val pool = on.ifEmpty { allSentences() }
+        val hidden = hiddenKeys()
+        val chosen = (if (isSourceOn(SOURCE_MINE)) mySentences() else emptyList()) +
+            (if (isSourceOn(SOURCE_JAR)) liked() else emptyList()) +
+            books.filter { isSourceOn(it.id) }.flatMap { it.marks }
+        val pool = chosen.filter { it.key !in hidden }.distinctBy { it.key }.ifEmpty { allMarks() }
         return pool.filter { it.key != excludeKey }.ifEmpty { pool }.randomOrNull()
     }
 
     /** The fixed sentence if there is one, otherwise a new random one. */
-    fun sentenceToShow(): Sentence? =
-        pinnedKey?.let { key -> allSentences().firstOrNull { it.key == key } } ?: randomSentence()
+    fun sentenceToShow(): Sentence? = pinned() ?: randomSentence()
 
-    var pinnedKey: String?
-        get() = prefs.getString("pinned", null)
-        set(value) = prefs.edit().putString("pinned", value).apply()
+    fun pinned(): Sentence? = prefs.getString("pinnedItem", null)?.let { Sentence.fromJson(JSONObject(it)) }
 
-    fun likedKeys(): Set<String> = prefs.getStringSet("liked", emptySet()).orEmpty()
+    fun setPinned(sentence: Sentence?) =
+        prefs.edit().putString("pinnedItem", sentence?.toJson()?.toString()).apply()
 
-    fun toggleLiked(key: String) {
-        val liked = likedKeys().toMutableSet()
-        if (!liked.add(key)) liked.remove(key)
-        prefs.edit().putStringSet("liked", liked).apply()
+    fun liked(): List<Sentence> {
+        val items = JSONArray(prefs.getString("jar", "[]"))
+        return List(items.length()) { Sentence.fromJson(items.getJSONObject(it)) }
     }
+
+    fun isLiked(key: String) = liked().any { it.key == key }
+
+    @Synchronized
+    fun toggleLiked(sentence: Sentence) {
+        val kept = liked().filter { it.key != sentence.key }
+        val updated = if (kept.size == liked().size) listOf(sentence) + kept else kept
+        val items = JSONArray()
+        updated.forEach { items.put(it.toJson()) }
+        prefs.edit().putString("jar", items.toString()).apply()
+    }
+
+    fun hiddenKeys(): Set<String> = prefs.getStringSet("hidden", emptySet()).orEmpty()
+
+    /** "Show less": this passage stays in its book but stops coming up at random. */
+    fun hide(key: String) = prefs.edit().putStringSet("hidden", hiddenKeys() + key).apply()
+
+    fun restoreHidden() = prefs.edit().remove("hidden").apply()
 
     // Videos
 
@@ -154,10 +253,7 @@ class Store private constructor(context: Context) {
     fun categories(): List<String> = videos().map { it.category }.filter(String::isNotEmpty).distinct()
 
     /** A line to preview a theme with, from the book that goes with it. */
-    fun sampleSentence(symbol: Symbol): Sentence? {
-        val book = books.firstOrNull { it.id == symbol.bookId }
-        return (book?.sentences ?: books.flatMap { it.sentences }).randomOrNull()
-    }
+    fun sampleSentence(symbol: Symbol): Sentence? = (book(symbol.bookId)?.marks ?: allMarks()).randomOrNull()
 
     /** First-run default: random sentences come from the theme's book and your own. */
     fun useBookOf(symbol: Symbol) {
