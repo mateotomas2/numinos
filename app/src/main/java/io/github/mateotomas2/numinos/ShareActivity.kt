@@ -3,10 +3,11 @@ package io.github.mateotomas2.numinos
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 
-/** Receives what you share from other apps: a YouTube video, or text to keep as a sentence. */
+/** Receives what you share from other apps: a YouTube video, text to keep as a sentence, or a PNG for the altar. */
 class ShareActivity : Activity() {
     private var openDialogs = 0
 
@@ -17,9 +18,22 @@ class ShareActivity : Activity() {
         dialog.show()
     }
 
+    private fun addImage(store: Store) {
+        @Suppress("DEPRECATION")
+        val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        val name = uri?.let { importAltarImage(this, it) }
+        if (name != null) store.saveAltar(store.altar() + AltarItem(AltarKind.IMAGE, 0.5f, 0.45f, content = name))
+        Toast.makeText(applicationContext, if (name != null) "Added to your altar" else "Couldn't read that image", Toast.LENGTH_SHORT).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val store = Store.get(this)
+        if (intent.type == "image/png") {
+            addImage(store)
+            finish()
+            return
+        }
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
         val videoId = YouTube.videoId(text)
         when {

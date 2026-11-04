@@ -78,7 +78,7 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (meditation == null && panel == null) showBubble()
+        if (meditation == null && panel == null && !AltarActivity.isOpen) showBubble()
         return START_STICKY
     }
 
@@ -238,13 +238,13 @@ class OverlayService : Service() {
 
     private fun onPanelClosed() {
         panel = null
-        if (meditation == null) showBubble()
+        if (meditation == null && !AltarActivity.isOpen) showBubble()
     }
 
     // Meditation
 
     private fun startMeditation(minutes: Int) {
-        val session = Meditation(this, windows, Symbol.of(store.symbolId), minutes) {
+        val session = Meditation(this, windows, store, minutes) {
             meditation = null
             startInForeground(presenceNotification())
             showBubble()

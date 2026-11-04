@@ -278,6 +278,7 @@ class Store private constructor(context: Context) {
     fun reset() {
         prefs.edit().clear().commit()
         File(app.cacheDir, "thumbs").deleteRecursively()
+        File(app.filesDir, "altar").deleteRecursively()
         applyLook()
     }
 
@@ -289,6 +290,27 @@ class Store private constructor(context: Context) {
             prefs.edit().putString("symbol", value).apply()
             Look.symbol = Symbol.of(value)
         }
+
+    /** The altar you arranged, or the theme's ready-made one until you do. */
+    fun altar(): List<AltarItem> {
+        val saved = prefs.getString("altar", null) ?: return starterAltar(Look.symbol)
+        val items = JSONArray(saved)
+        return List(items.length()) { AltarItem.fromJson(items.getJSONObject(it)) }
+    }
+
+    fun saveAltar(items: List<AltarItem>) {
+        val saved = JSONArray()
+        items.forEach { saved.put(it.toJson()) }
+        prefs.edit().putString("altar", saved.toString()).apply()
+    }
+
+    var altarBackdrop: AltarBackground
+        get() = AltarBackground.of(prefs.getString("altarBackdrop", null))
+        set(value) = prefs.edit().putString("altarBackdrop", value.name).apply()
+
+    var sitScreenSleeps: Boolean
+        get() = prefs.getBoolean("sitScreenSleeps", false)
+        set(value) = prefs.edit().putBoolean("sitScreenSleeps", value).apply()
 
     var minutes: Int
         get() = prefs.getInt("minutes", 10)
