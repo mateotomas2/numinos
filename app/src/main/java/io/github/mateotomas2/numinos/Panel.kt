@@ -63,7 +63,10 @@ class Panel(
     private val context = ContextThemeWrapper(serviceContext, android.R.style.Theme_Material_Light_NoActionBar)
     private val pad = context.dp(16)
     private var sentence: Sentence? = store.sentenceToShow()
-    private var category: String? = null
+    private var category: String? = store.videoCategory
+    private var videoScroll = store.videoScroll
+    private var chipScroll = store.chipScroll
+    private var arranging: String? = null
     private var closing = false
     private var breath: ValueAnimator? = null
     private val openDialogs = mutableListOf<AlertDialog>()
@@ -147,6 +150,7 @@ class Panel(
     private fun goBack() {
         when {
             pill != null -> dismissPill()
+            arranging != null -> arrange(null)
             backStack.isNotEmpty() -> {
                 savePlace()
                 page = backStack.removeLast()
@@ -159,6 +163,7 @@ class Panel(
     }
 
     private fun navigate(target: Page) {
+        arranging = null
         savePlace()
         backStack.addLast(page)
         page = target
@@ -193,6 +198,9 @@ class Panel(
 
     fun dismissNow() {
         closing = true
+        store.videoCategory = category
+        store.videoScroll = videoScroll
+        store.chipScroll = chipScroll
         breath?.cancel()
         openDialogs.forEach { runCatching { it.dismiss() } }
         runCatching { windows.removeView(root) }
@@ -274,11 +282,20 @@ class Panel(
         layoutParams = LinearLayout.LayoutParams(-1, context.dp(1))
     }
 
-    private fun horizontal(content: LinearLayout) = HorizontalScrollView(context).apply {
+    /** Opens at [startX], once the content has a size to scroll over, and reports where it's moved to. */
+    private fun horizontal(content: LinearLayout, startX: Int = 0, onScrolled: (Int) -> Unit = {}) = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
         clipToPadding = false
         addView(content)
+        addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(v: View, l: Int, t: Int, r: Int, b: Int, oldL: Int, oldT: Int, oldR: Int, oldB: Int) {
+                removeOnLayoutChangeListener(this)
+                scrollTo(startX, 0)
+                setOnScrollChangeListener { _, x, _, _, _ -> onScrolled(x) }
+                onScrolled(scrollX)
+            }
+        })
     }
 
     private fun sourceLine(item: Sentence?) =
@@ -375,7 +392,9 @@ class Panel(
 
     // The floating actions
 
-    private fun showPill(item: Sentence) {
+    private fun showPill(item: Sentence) = showPill { fillPill(it, item) }
+
+    private fun showPill(fill: (LinearLayout) -> Unit) {
         dismissPill()
         val shown = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -384,7 +403,7 @@ class Panel(
             background = rounded(CARD, context.dp(26).toFloat(), context.dp(1), LINE)
             elevation = context.dp(18).toFloat()
         }
-        fillPill(shown, item)
+        fill(shown)
         shown.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val origin = IntArray(2)
         root.getLocationOnScreen(origin)
@@ -404,14 +423,15 @@ class Panel(
     }
 
     /** Every action closes the pill, in every place it appears. */
+    private fun LinearLayout.addAction(icon: Int, description: String, tint: Int = INK, action: () -> Unit) {
+        addView(context.iconButton(icon, description, tint) {
+            dismissPill()
+            action()
+        }, LinearLayout.LayoutParams(context.dp(46), context.dp(46)))
+    }
+
     private fun fillPill(shown: LinearLayout, item: Sentence) {
-        val size = context.dp(46)
-        fun add(icon: Int, description: String, tint: Int = INK, action: () -> Unit) {
-            shown.addView(context.iconButton(icon, description, tint) {
-                dismissPill()
-                action()
-            }, LinearLayout.LayoutParams(size, size))
-        }
+        fun add(icon: Int, description: String, tint: Int = INK, action: () -> Unit) = shown.addAction(icon, description, tint, action)
         if (page == Page.HOME) {
             add(R.drawable.ic_another, "Another sentence") {
                 store.setPinned(null)
@@ -472,10 +492,19 @@ class Panel(
         val all = store.videos()
         val categories = store.categories()
         if (category !in categories) category = null
+        val shown = all.filter { category == null || it.category == category }
         return LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, context.dp(10), 0, context.dp(12))
-            if (categories.size > 1 || (categories.size == 1 && all.any { it.category.isEmpty() })) {
+            if (arranging != null) {
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(pad, 0, pad, context.dp(10))
+                    addView(context.label("Drag the outlined video", 13f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(context.chip("Done", true) { arrange(null) })
+                })
+            } else if (categories.size > 1 || (categories.size == 1 && all.any { it.category.isEmpty() })) {
                 val chips = LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(pad, 0, pad, context.dp(10))
@@ -483,12 +512,13 @@ class Panel(
                 fun add(name: String, value: String?) {
                     chips.addView(context.chip(name, category == value) {
                         category = value
+                        videoScroll = 0
                         refreshHomeVideos()
                     }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = context.dp(6) })
                 }
                 add("All", null)
                 categories.forEach { add(it, it) }
-                addView(horizontal(chips))
+                addView(horizontal(chips, chipScroll) { chipScroll = it })
             }
             val tiles = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -496,13 +526,18 @@ class Panel(
                 isBaselineAligned = false
                 setPadding(pad, 0, pad, 0)
             }
-            all.filter { category == null || it.category == category }.forEach { tiles.addView(videoTile(it)) }
-            tiles.addView(addVideoButton())
-            addView(horizontal(tiles))
+            shown.forEach { tiles.addView(videoTile(it, shown.size)) }
+            if (arranging == null) tiles.addView(addVideoButton())
+            val scroller = horizontal(tiles, videoScroll) { videoScroll = it }
+            addView(scroller)
+            for (i in 0 until tiles.childCount) {
+                val tile = tiles.getChildAt(i)
+                if (tile.tag == arranging) dragAlong(tile, tiles, scroller)
+            }
         }
     }
 
-    private fun videoTile(video: Video): View {
+    private fun videoTile(video: Video, neighbours: Int): View {
         val thumb = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = video.title
@@ -524,24 +559,111 @@ class Panel(
             addView(shade, FrameLayout.LayoutParams(-1, context.dp(56), Gravity.BOTTOM))
             addView(title, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
             layoutParams = LinearLayout.LayoutParams(context.dp(138), context.dp(78)).apply { marginEnd = context.dp(10) }
-            tappable {
-                store.markVideoUsed(video.id)
-                YouTube.open(context, video.id)
-                close()
+            tag = video.id
+            if (arranging == null) {
+                tappable {
+                    YouTube.open(context, video.id)
+                    close()
+                }
+                setOnLongClickListener {
+                    showPill { fillVideoPill(it, video, neighbours) }
+                    true
+                }
+            } else if (arranging == video.id) {
+                addView(View(context).apply {
+                    background = rounded(Color.TRANSPARENT, context.dp(12).toFloat(), context.dp(3), ACCENT)
+                }, FrameLayout.LayoutParams(-1, -1))
+            } else {
+                alpha = 0.55f
+                tappable { arrange(video.id) }
             }
-            setOnLongClickListener {
-                context.dialogBuilder()
-                    .setTitle(video.title.ifEmpty { "YouTube video" })
-                    .setMessage("Remove this video from your practice list?")
-                    .setPositiveButton("Remove") { _, _ ->
-                        store.removeVideo(video.id)
-                        refreshHomeVideos()
-                    }
-                    .setNegativeButton("Keep", null)
-                    .create()
-                    .showInPanel()
-                true
+        }
+    }
+
+    private fun fillVideoPill(shown: LinearLayout, video: Video, neighbours: Int) {
+        if (neighbours > 1) shown.addAction(R.drawable.ic_rearrange, "Rearrange") { arrange(video.id) }
+        shown.addAction(R.drawable.ic_category, "Change category") {
+            chooseCategory(context, store, { it.showInPanel() }) { name ->
+                store.setVideoCategory(video.id, name)
+                refreshHomeVideos()
             }
+        }
+        shown.addAction(R.drawable.ic_delete, "Remove") {
+            context.dialogBuilder()
+                .setTitle(video.title.ifEmpty { "YouTube video" })
+                .setMessage("Remove this video from your practice list?")
+                .setPositiveButton("Remove") { _, _ ->
+                    store.removeVideo(video.id)
+                    refreshHomeVideos()
+                }
+                .setNegativeButton("Keep", null)
+                .create()
+                .showInPanel()
+        }
+    }
+
+    /** Lifts one video out of the row to be dragged, or puts the row back to normal when given null. */
+    private fun arrange(id: String?) {
+        arranging = id
+        refreshHomeVideos()
+    }
+
+    /** The tile follows the finger, the row scrolls when it nears an edge, and letting go saves the order. */
+    private fun dragAlong(tile: View, row: LinearLayout, scroller: HorizontalScrollView) {
+        val edge = context.dp(48)
+        var fingerX = 0f
+
+        fun place(move: Float) {
+            tile.translationX = (tile.translationX + move).coerceIn(-tile.left.toFloat(), (row.width - tile.right).toFloat())
+            // Children keep their old positions until the next layout, so wait for it before comparing them.
+            if (row.isLayoutRequested) return
+            val center = tile.left + tile.translationX + tile.width / 2
+            val index = row.indexOfChild(tile)
+            val neighbour = row.getChildAt(if (tile.translationX > 0) index + 1 else index - 1) ?: return
+            if (tile.translationX > 0 == center > neighbour.left + neighbour.width / 2) {
+                val step = (neighbour.left - tile.left).toFloat()
+                row.removeView(neighbour)
+                row.addView(neighbour, index)
+                tile.translationX -= step
+                neighbour.translationX = step
+                neighbour.animate().translationX(0f).setDuration(160).start()
+            }
+        }
+
+        val autoScroll = object : Runnable {
+            override fun run() {
+                val at = IntArray(2)
+                scroller.getLocationOnScreen(at)
+                val speed = when {
+                    fingerX < at[0] + edge -> -context.dp(6)
+                    fingerX > at[0] + scroller.width - edge -> context.dp(6)
+                    else -> 0
+                }
+                val before = scroller.scrollX
+                scroller.scrollBy(speed, 0)
+                if (scroller.scrollX != before) place((scroller.scrollX - before).toFloat())
+                scroller.postOnAnimation(this)
+            }
+        }
+
+        tile.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    fingerX = event.rawX
+                    scroller.requestDisallowInterceptTouchEvent(true)
+                    scroller.postOnAnimation(autoScroll)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    place(event.rawX - fingerX)
+                    fingerX = event.rawX
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    scroller.removeCallbacks(autoScroll)
+                    tile.animate().translationX(0f).setDuration(160).start()
+                    store.arrangeVideos(List(row.childCount) { row.getChildAt(it).tag as String })
+                }
+            }
+            true
         }
     }
 
@@ -572,6 +694,8 @@ class Panel(
     private fun pickCategory(id: String) {
         chooseCategory(context, store, { it.showInPanel() }) { name ->
             store.addVideo(id, name)
+            category = store.videoCategory
+            videoScroll = 0
             YouTube.fetchTitle(context, id) { refreshHomeVideos() }
             refreshHomeVideos()
         }
