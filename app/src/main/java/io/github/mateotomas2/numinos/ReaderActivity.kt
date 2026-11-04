@@ -2,6 +2,7 @@ package io.github.mateotomas2.numinos
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.ActionMode
 import android.view.Gravity
@@ -34,6 +35,7 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
 import org.readium.r2.shared.util.http.DefaultHttpClient
+import org.readium.r2.shared.util.toAbsoluteUrl
 import org.readium.r2.shared.util.toUrl
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
@@ -142,7 +144,9 @@ class ReaderActivity : AppCompatActivity() {
     private suspend fun open(containerId: Int) {
         val http = DefaultHttpClient()
         val retriever = AssetRetriever(contentResolver, http)
-        val asset = retriever.retrieve(store.bookFile(book).toUrl(isDirectory = false)).getOrElse { return fail(it.message) }
+        val source = book.path?.takeIf { it.startsWith("content:") }?.let { Uri.parse(it).toAbsoluteUrl() }
+            ?: store.bookFile(book).toUrl(isDirectory = false)
+        val asset = retriever.retrieve(source).getOrElse { return fail(it.message) }
         val opener = PublicationOpener(DefaultPublicationParser(this, http, retriever, null))
         val opened = opener.open(asset, allowUserInteraction = false).getOrElse { return fail(it.message) }
         publication = opened

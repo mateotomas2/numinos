@@ -25,7 +25,7 @@ object BookLoader {
 
     fun fetchShelf(context: Context) {
         val store = Store.get(context)
-        store.shelfBooks().forEach { if (!store.isDownloaded(it) && it.id !in failed) fetch(context, it) }
+        store.shelfBooks().filterNot { it.isImported }.forEach { if (!store.isDownloaded(it) && it.id !in failed) fetch(context, it) }
     }
 
     fun fetch(context: Context, book: Book) {
@@ -33,7 +33,8 @@ object BookLoader {
         if (store.isDownloaded(book) || book.id in progress) return
         failed.remove(book.id)
         progress[book.id] = 0
-        notifyListener()
+        // Posted because this can be called while the shelf is being drawn, and redrawing inside that would duplicate it.
+        main.post { notifyListener() }
         workers.execute {
             val ok = runCatching { download(store.bookFile(book), book) }.getOrDefault(false)
             main.post {

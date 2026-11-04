@@ -40,6 +40,12 @@ private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
 
 private const val HOLD_START = "Let go to start, slide sideways to cancel"
 
+private const val MOVED_FILE = "This book's file was moved or deleted. Remove it and add it again from its new place."
+
+private val OWN_BOOK_COLORS = intArrayOf(
+    0xFF6B4E71.toInt(), 0xFF2F6F73.toInt(), 0xFF8A5A2B.toInt(), 0xFF4F6D3A.toInt(), 0xFF7A3E48.toInt(), 0xFF3F5277.toInt(),
+)
+
 private val SPINE_COLORS = mapOf(
     "tao" to 0xFF3F7D68.toInt(),
     "upanishads" to 0xFFB5620F.toInt(),
@@ -77,6 +83,9 @@ class Panel(
     private var touchY = 0f
     private var swallowTouch = false
     private var suspended = false
+    val isSuspended get() = suspended
+    private var foundBooks: List<FoundEpub>? = null
+    private var searching = false
     private val windowParams = WindowManager.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -156,6 +165,7 @@ class Panel(
         }
         // The window is redrawn so the tilted book stands straight and anything kept while reading shows up.
         store.pinned()?.let { sentence = it }
+        foundBooks = null
         render()
         root.animate().alpha(1f).setStartDelay(0).setDuration(220).start()
     }
@@ -265,7 +275,7 @@ class Panel(
         breath?.cancel()
         sentenceHost = null
         card.removeAllViews()
-        val tall = page == Page.NOTEBOOK || page == Page.JAR
+        val tall = page == Page.NOTEBOOK || page == Page.JAR || page == Page.BOOKSELLER
         card.layoutParams = (card.layoutParams as FrameLayout.LayoutParams).apply {
             height = if (tall) (context.resources.displayMetrics.heightPixels * 0.86f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
         }
@@ -381,6 +391,7 @@ class Panel(
         when {
             owner == null -> navigate(Page.NOTEBOOK)
             store.isDownloaded(owner) -> openBook(owner, item.locator)
+            owner.isImported -> Toast.makeText(context, MOVED_FILE, Toast.LENGTH_LONG).show()
             store.isOnShelf(owner) -> tellDownloadState(owner)
             else -> navigate(Page.BOOKSELLER)
         }
@@ -869,13 +880,15 @@ class Panel(
             isBaselineAligned = false
             minimumHeight = context.dp(204)
             store.shelfBooks().forEach { item ->
-                val spine = SpineView(context, item.title, SPINE_COLORS[item.id] ?: ACCENT)
+                val spine = SpineView(context, item.title, spineColor(item))
                 spine.pivotX = 0f
                 // A book still downloading stands faded on the shelf.
                 if (!store.isDownloaded(item)) spine.alpha = 0.45f
                 spine.setOnClickListener {
                     if (store.isDownloaded(item)) {
                         tiltOut(spine) { openBook(item, null) }
+                    } else if (item.isImported) {
+                        Toast.makeText(context, MOVED_FILE, Toast.LENGTH_LONG).show()
                     } else {
                         tellDownloadState(item)
                     }
@@ -924,7 +937,13 @@ class Panel(
     private fun confirmRemove(item: Book) {
         context.dialogBuilder()
             .setTitle("Remove ${item.title}?")
-            .setMessage("It leaves your shelf and stops giving random sentences. Your liked passages stay in the jar.")
+            .setMessage(
+                if (item.isImported) {
+                    "It leaves your shelf, but your file stays on your phone. Your liked passages stay in the jar."
+                } else {
+                    "It leaves your shelf and stops giving random sentences. Your liked passages stay in the jar."
+                },
+            )
             .setPositiveButton("Remove") { _, _ ->
                 store.removeFromShelf(item)
                 if (store.pinned()?.bookId == item.id) store.setPinned(null)
@@ -954,32 +973,124 @@ class Panel(
                 onShelf -> "Waiting to download"
                 else -> "Add · ${sizeLabel(item.size)}"
             }
-            rows.addView(LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                isBaselineAligned = false
-                setPadding(context.dp(12), context.dp(10), context.dp(12), context.dp(10))
-                background = rounded(CARD, context.dp(12).toFloat(), context.dp(1), LINE)
-                addView(View(context).apply {
-                    background = rounded(SPINE_COLORS[item.id] ?: ACCENT, context.dp(3).toFloat())
-                }, LinearLayout.LayoutParams(context.dp(14), context.dp(52)).apply { marginEnd = context.dp(12) })
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    addView(context.label(item.title, 16f, INK, serif = true))
-                    addView(context.label(item.credit, 11.5f, SOFT))
-                    addView(context.label(status, 12.5f, if (onShelf) SOFT else ACCENT, bold = !onShelf).apply { setPadding(0, context.dp(3), 0, 0) })
-                }, LinearLayout.LayoutParams(0, -2, 1f))
-                if (!onShelf || BookLoader.hasFailed(item.id)) {
-                    tappable {
-                        store.addToShelf(item)
-                        BookLoader.fetch(context, item)
-                        render()
-                    }
-                }
-            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = context.dp(8) })
+            val canTap = !onShelf || BookLoader.hasFailed(item.id)
+            rows.addView(bookRow(spineColor(item), item.title, item.credit, status, canTap) {
+                store.addToShelf(item)
+                BookLoader.fetch(context, item)
+                render()
+            })
         }
-        card.addView(rows)
+        rows.addView(context.label("ON YOUR PHONE", 12f, SOFT, bold = true).apply {
+            letterSpacing = 0.08f
+            setPadding(context.dp(2), context.dp(14), 0, context.dp(8))
+        })
+        addPhoneBooks(rows)
+        card.addView(ScrollView(context).apply {
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(rows)
+        }, LinearLayout.LayoutParams(-1, 0, 1f))
     }
+
+    private fun addPhoneBooks(rows: LinearLayout) {
+        if (!EpubFiles.canSearch(context)) {
+            rows.addView(context.label("NuminOS can list the EPUB files on your phone so you can add them. It only opens EPUBs, and it doesn't upload anything.", 14f, SOFT).apply {
+                setLineSpacing(0f, 1.16f)
+            })
+            rows.addView(actionButton("Continue") {
+                context.startActivity(BookImportActivity.intent(context, BookImportActivity.MODE_ACCESS))
+                suspendForReader()
+            })
+        } else {
+            val found = foundBooks
+            when {
+                found == null -> {
+                    rows.addView(context.label("Looking for EPUB files…", 14f, SOFT))
+                    searchPhone()
+                }
+                found.isEmpty() -> rows.addView(context.label("No EPUB files found. Try Choose a file if yours is in another app.", 14f, SOFT))
+                else -> found.forEach { rows.addView(phoneBookRow(it)) }
+            }
+            if (found != null) {
+                rows.addView(actionButton("Look again") {
+                    foundBooks = null
+                    render()
+                })
+            }
+        }
+        rows.addView(actionButton("Choose a file") {
+            context.startActivity(BookImportActivity.intent(context, BookImportActivity.MODE_PICK))
+            suspendForReader()
+        })
+    }
+
+    private fun searchPhone() {
+        if (searching) return
+        searching = true
+        EpubFiles.search(context) { results ->
+            searching = false
+            foundBooks = results
+            if (page == Page.BOOKSELLER && !closing) render()
+        }
+    }
+
+    private fun phoneBookRow(found: FoundEpub): View {
+        val added = store.isImported(found.path)
+        val status = when {
+            found.isProtected -> "Copy-protected"
+            added -> "On your shelf"
+            else -> "Add · ${sizeLabel(found.size)}"
+        }
+        val folder = java.io.File(found.path).parentFile?.name.orEmpty()
+        val detail = listOf(found.author, folder).filter(String::isNotEmpty).joinToString(" · ")
+        return bookRow(colorFor(found.title), found.title, detail, status, !added) {
+            if (found.isProtected) {
+                Toast.makeText(context, BookImportActivity.COPY_PROTECTED, Toast.LENGTH_LONG).show()
+            } else {
+                store.addImported(found.path, found.title, found.author)
+                render()
+            }
+        }
+    }
+
+    private fun bookRow(color: Int, title: String, detail: String, status: String, canTap: Boolean, onTap: () -> Unit) =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isBaselineAligned = false
+            setPadding(context.dp(12), context.dp(10), context.dp(12), context.dp(10))
+            background = rounded(CARD, context.dp(12).toFloat(), context.dp(1), LINE)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = context.dp(8) }
+            addView(View(context).apply {
+                background = rounded(color, context.dp(3).toFloat())
+            }, LinearLayout.LayoutParams(context.dp(14), context.dp(52)).apply { marginEnd = context.dp(12) })
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(context.label(title, 16f, INK, serif = true).apply {
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                if (detail.isNotEmpty()) {
+                    addView(context.label(detail, 11.5f, SOFT).apply {
+                        maxLines = 1
+                        ellipsize = TextUtils.TruncateAt.END
+                    })
+                }
+                addView(context.label(status, 12.5f, if (canTap) ACCENT else SOFT, bold = canTap).apply { setPadding(0, context.dp(3), 0, 0) })
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            if (canTap) tappable(onTap)
+        }
+
+    private fun actionButton(text: String, onTap: () -> Unit) = context.label(text, 14f, ACCENT, bold = true).apply {
+        gravity = Gravity.CENTER
+        minHeight = context.dp(46)
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(6) }
+        tappable(onTap)
+    }
+
+    private fun spineColor(item: Book) = SPINE_COLORS[item.id] ?: colorFor(item.title)
+
+    /** Your own books get a colour from their title, the same one every time. */
+    private fun colorFor(title: String) = OWN_BOOK_COLORS[Math.floorMod(title.hashCode(), OWN_BOOK_COLORS.size)]
 
     private fun sizeLabel(bytes: Long) =
         if (bytes >= 1_000_000) String.format(Locale.ROOT, "%.1f MB", bytes / 1_000_000.0) else "${bytes / 1000} KB"

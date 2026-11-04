@@ -19,6 +19,7 @@ Requires Android 8.0 or newer.
 
 - **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap + in the floating window and paste a link.
 - **A sentence:** tap the sentence, open the notebook and tap +. You can also share selected text from any app to NuminOS.
+- **A book:** on the shelf, tap +. You can add a starter book, an EPUB found on your phone or any file you choose. Your EPUBs open where they are, with nothing copied or converted.
 - **Remove something:** long-press a video to remove it, rearrange it or change its category, or long-press one of your sentences and tap delete.
 
 ## Install
@@ -26,6 +27,8 @@ Requires Android 8.0 or newer.
 Download the APK from [Releases](https://github.com/mateotomas2/numinos/releases/latest) and open it on your phone. Choose a theme, then allow **Show over other apps**.
 
 If Android says this is a restricted setting, open NuminOS in App info, tap the ⋮ menu and choose **Allow restricted settings**.
+
+To list the EPUB files on your phone, NuminOS asks for **All files access**. It only opens EPUB files and doesn't upload anything, which you can check in this code. If you'd rather not allow it, **Choose a file** works without it. Only add books you have the right to use. Copy-protected (DRM) EPUBs can't be opened, so most store-bought books won't work.
 
 If the symbol disappears after a while, set the app's battery use to **Unrestricted**. Some phone brands close background apps to save battery.
 
