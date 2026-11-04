@@ -259,6 +259,9 @@ class MainActivity : Activity() {
             OverlayService.refresh(this)
         }
 
+        heading("During a sit")
+        toggle("Let the screen sleep", store.sitScreenSleeps) { store.sitScreenSleeps = it }
+
         heading("Permissions")
         addSetupSteps()
 

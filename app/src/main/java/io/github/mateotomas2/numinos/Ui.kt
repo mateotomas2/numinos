@@ -6,7 +6,9 @@ import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PixelFormat
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -17,6 +19,10 @@ import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
@@ -124,6 +130,51 @@ fun Context.dialogField(hint: String, type: Int = InputType.TYPE_CLASS_TEXT or I
         addView(field)
     }
     return box to field
+}
+
+/** A window above other apps that covers the whole screen, including around a camera cutout. */
+fun wholeScreenParams(extraFlags: Int = 0) = WindowManager.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or extraFlags,
+    PixelFormat.TRANSLUCENT,
+).apply {
+    if (Build.VERSION.SDK_INT >= 28) layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    if (Build.VERSION.SDK_INT >= 30) fitInsetsTypes = 0
+}
+
+fun Window.useWholeScreen() {
+    if (Build.VERSION.SDK_INT >= 28) {
+        attributes = attributes.apply { layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES }
+    }
+    if (Build.VERSION.SDK_INT >= 30) setDecorFitsSystemWindows(false)
+}
+
+/** Hides the status and navigation bars. A swipe from the edge shows them for a moment. */
+fun View.hideSystemBars() {
+    if (Build.VERSION.SDK_INT >= 30) {
+        windowInsetsController?.apply {
+            systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsets.Type.systemBars())
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+    }
+}
+
+/** How far content must stay from each edge to clear any bars still showing and the camera cutout. */
+@Suppress("DEPRECATION")
+fun screenEdges(insets: WindowInsets): Rect {
+    val cutout = if (Build.VERSION.SDK_INT >= 28) insets.displayCutout else null
+    return Rect(
+        maxOf(insets.systemWindowInsetLeft, cutout?.safeInsetLeft ?: 0),
+        maxOf(insets.systemWindowInsetTop, cutout?.safeInsetTop ?: 0),
+        maxOf(insets.systemWindowInsetRight, cutout?.safeInsetRight ?: 0),
+        maxOf(insets.systemWindowInsetBottom, cutout?.safeInsetBottom ?: 0),
+    )
 }
 
 /** The minutes the timer offers. 0 means no timer. */

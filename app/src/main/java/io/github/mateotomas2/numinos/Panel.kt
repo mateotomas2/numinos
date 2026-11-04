@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.Spannable
@@ -55,7 +54,7 @@ private val SPINE_COLORS = mapOf(
     "bible" to 0xFF3A5FA8.toInt(),
 )
 
-/** The floating window: the sentence, videos and meditation, with the library behind the sentence. */
+/** The whole-screen window: the sentence, videos and meditation, with the library behind the sentence. */
 class Panel(
     serviceContext: Context,
     private val windows: WindowManager,
@@ -124,29 +123,22 @@ class Panel(
     }
     private val card = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        background = rounded(PAPER, context.dp(26).toFloat())
-        elevation = context.dp(14).toFloat()
-        clipToOutline = true
-        isClickable = true // Touches on the card must not reach the scrim and close it.
+        setBackgroundColor(PAPER)
+        isClickable = true
+        setOnApplyWindowInsetsListener { _, insets ->
+            val edges = screenEdges(insets)
+            setPadding(edges.left, edges.top, edges.right, edges.bottom)
+            insets
+        }
     }
 
     fun show() {
-        root.setBackgroundColor(0x66000000)
         root.alpha = 0f
-        root.setOnClickListener { close() }
-        val width = min(context.resources.displayMetrics.widthPixels - context.dp(24), context.dp(380))
-        root.addView(card, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        root.addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         render()
         root.onBackGesture { goBack() }
-        windows.addView(
-            root,
-            WindowManager.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT,
-            ),
-        )
+        windows.addView(root, wholeScreenParams())
+        root.hideSystemBars()
         card.visibility = View.INVISIBLE
         root.animate().alpha(1f).setDuration(260).start()
         card.post { reveal(opening = true) }
@@ -262,10 +254,6 @@ class Panel(
         breath?.cancel()
         sentenceHost = null
         card.removeAllViews()
-        val tall = page != Page.HOME && page != Page.SHELF
-        card.layoutParams = (card.layoutParams as FrameLayout.LayoutParams).apply {
-            height = if (tall) (context.resources.displayMetrics.heightPixels * 0.86f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
-        }
         when (page) {
             Page.HOME -> renderHome()
             Page.SHELF -> renderShelf()
@@ -329,7 +317,7 @@ class Panel(
         val host = FrameLayout(context)
         sentenceHost = host
         fillSentence(host)
-        card.addView(host, LinearLayout.LayoutParams(-1, -2))
+        card.addView(host, LinearLayout.LayoutParams(-1, 0, 1f))
         card.addView(divider())
         card.addView(videoSection())
         card.addView(divider())
@@ -342,7 +330,8 @@ class Panel(
         val current = sentence
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad + context.dp(2), pad + context.dp(4), pad, context.dp(6))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(pad + context.dp(2), context.dp(52), pad, context.dp(6))
             addView(context.label(current?.text ?: "Add a sentence of your own, or turn on a book.", 21f, INK, serif = true).apply {
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, context.dp(26), 0)
@@ -361,7 +350,14 @@ class Panel(
                 true
             }
         }
-        host.addView(body, FrameLayout.LayoutParams(-1, -2))
+        host.addView(body, FrameLayout.LayoutParams(-1, -1))
+        host.addView(
+            context.iconButton(R.drawable.ic_close, "Close", SOFT) { close() },
+            FrameLayout.LayoutParams(context.dp(40), context.dp(40), Gravity.TOP or Gravity.START).apply {
+                topMargin = context.dp(6)
+                marginStart = context.dp(6)
+            },
+        )
         host.addView(
             context.iconButton(R.drawable.ic_settings, "Settings", SOFT) {
                 context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -744,6 +740,11 @@ class Panel(
             }
             start()
         }
+        addView(context.chip("Altar", false) {
+            AltarActivity.isOpen = true // Keeps the symbol from flashing up as this window closes.
+            context.startActivity(Intent(context, AltarActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            close()
+        })
         addView(durationChip(), LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
     }
 
