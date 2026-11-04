@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.text.TextPaint
+import android.text.TextUtils
 import android.view.View
 import kotlin.random.Random
 
@@ -43,7 +45,8 @@ class SpineView(context: Context, private val title: String, private val color: 
         canvas.translate(w / 2, h / 2)
         canvas.rotate(-90f)
         val metrics = paint.fontMetrics
-        canvas.drawText(title, 0f, -(metrics.ascent + metrics.descent) / 2, paint)
+        val fitted = TextUtils.ellipsize(title, TextPaint(paint), h * 0.74f, TextUtils.TruncateAt.END).toString()
+        canvas.drawText(fitted, 0f, -(metrics.ascent + metrics.descent) / 2, paint)
         canvas.restore()
     }
 }

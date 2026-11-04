@@ -2,6 +2,7 @@ package io.github.mateotomas2.numinos
 
 import android.content.Context
 import android.content.res.Configuration
+import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -23,7 +24,11 @@ data class Book(
     val sha256: String,
     val size: Long,
     val marks: List<Sentence>,
-)
+    /** Where your own EPUB lives. Starter books have none, because they're downloaded. */
+    val path: String? = null,
+) {
+    val isImported get() = path != null
+}
 
 /** A line to show: from a book when [bookId] is set, otherwise written by you. [locator] is its place in the book. */
 data class Sentence(
@@ -94,25 +99,66 @@ class Store private constructor(context: Context) {
         }.sortedBy { it.shelf }
     }
 
-    fun book(id: String?): Book? = books.firstOrNull { it.id == id }
+    fun book(id: String?): Book? = books.firstOrNull { it.id == id } ?: importedBooks().firstOrNull { it.id == id }
 
-    fun bookFile(book: Book) = File(File(app.filesDir, "books"), "${book.id}.epub")
+    fun bookFile(book: Book) = book.path?.let(::File) ?: File(File(app.filesDir, "books"), "${book.id}.epub")
 
-    fun isDownloaded(book: Book) = bookFile(book).exists()
+    /** Your own EPUBs are opened where they are, so this also reports whether one has been moved or deleted. */
+    fun isDownloaded(book: Book): Boolean {
+        val path = book.path
+        if (path != null && path.startsWith("content:")) {
+            return runCatching { app.contentResolver.openFileDescriptor(Uri.parse(path), "r")?.use { true } ?: false }.getOrDefault(false)
+        }
+        return bookFile(book).exists()
+    }
+
+    fun importedBooks(): List<Book> {
+        val items = JSONArray(prefs.getString("imported", "[]"))
+        return List(items.length()) { i ->
+            val item = items.getJSONObject(i)
+            Book(
+                item.getString("id"), item.getString("title"), item.optString("author"), 100 + i,
+                "", "", 0, emptyList(), item.getString("path"),
+            )
+        }
+    }
+
+    fun isImported(path: String) = importedBooks().any { it.path == path }
+
+    /** Remembers where the file is. The file itself stays where it is and isn't copied or converted. */
+    @Synchronized
+    fun addImported(path: String, title: String, author: String) {
+        if (isImported(path)) return
+        val items = JSONArray(prefs.getString("imported", "[]"))
+        val id = "own-" + UUID.nameUUIDFromBytes(path.toByteArray())
+        items.put(JSONObject().put("id", id).put("title", title).put("author", author).put("path", path))
+        prefs.edit().putString("imported", items.toString()).apply()
+    }
 
     private fun shelfIds(): Set<String> = prefs.getStringSet("shelf", null) ?: startingShelf(Symbol.of(symbolId))
 
     private fun startingShelf(symbol: Symbol): Set<String> =
         symbol.bookId?.let { setOf(it) } ?: books.map { it.id }.toSet()
 
-    fun shelfBooks(): List<Book> = shelfIds().let { ids -> books.filter { it.id in ids } }
+    fun shelfBooks(): List<Book> = shelfIds().let { ids -> books.filter { it.id in ids } } + importedBooks()
 
-    fun isOnShelf(book: Book) = book.id in shelfIds()
+    fun isOnShelf(book: Book) = book.isImported || book.id in shelfIds()
 
     fun addToShelf(book: Book) = prefs.edit().putStringSet("shelf", shelfIds() + book.id).apply()
 
     /** Your liked passages stay in the jar, and your place in the book is kept in case you add it back. */
+    @Synchronized
     fun removeFromShelf(book: Book) {
+        if (book.isImported) {
+            // Only forgets the book: your file is never deleted.
+            val kept = JSONArray()
+            val items = JSONArray(prefs.getString("imported", "[]"))
+            for (i in 0 until items.length()) {
+                if (items.getJSONObject(i).getString("id") != book.id) kept.put(items.getJSONObject(i))
+            }
+            prefs.edit().putString("imported", kept.toString()).apply()
+            return
+        }
         prefs.edit().putStringSet("shelf", shelfIds() - book.id).apply()
         bookFile(book).delete()
     }

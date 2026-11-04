@@ -91,6 +91,8 @@ class OverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // If you left a permission screen some other way, the waiting window shouldn't keep the symbol hidden.
+        if (intent?.action == null && !readerOpen) panel?.takeIf { it.isSuspended }?.close()
         if (meditation == null && panel == null && !readerOpen) showBubble()
         return START_STICKY
     }
