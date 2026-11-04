@@ -2,14 +2,14 @@
 
 NuminOS is an Android app, not an operating system. It puts a small symbol above your other apps. Tap it and a floating window offers a sentence to live with, your practice videos and a meditation, then folds away again.
 
-It has no account and no server. Everything you add stays on your phone. The internet is used only for YouTube titles, thumbnails and videos.
+It has no account and no server. Everything you add stays on your phone. The internet is used only for YouTube titles, thumbnails and videos, and to download the starter books from this repository's releases.
 
 Requires Android 8.0 or newer.
 
 ## What it does
 
-- **Sentence:** shows a random line from marked passages in the books, your liked passages and your own sentences, or one you fix in place. Tap it to open the library, tap its title to open the book at that passage, and long-press it for more actions.
-- **Library:** a bookshelf with the full text of all four books, a notebook for your sentences and a jar for passages you like. Books remember your place and have adjustable text.
+- **Sentence:** shows a random line from marked passages in the books on your shelf, your liked passages and your own sentences, or one you fix in place. Tap it to open the library, tap its title to open the book at that passage, and long-press it for more actions.
+- **Library:** a bookshelf with the books you've added, a notebook for your sentences and a jar for passages you like. Books open on a floating card with images, tables and adjustable text, and they remember your place.
 - **Videos:** keeps your YouTube practice videos, in categories you create and the order you choose. It reopens on the category and place you left. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
 - **Meditation:** tap Meditate to start with your last duration. Tap the duration to choose another on a wheel, or hold it, drag and let go to set it and start in one move. Choose ∞ to sit with no timer, which ends when you end it or after 2 hours. There's an opening and closing bell, and it keeps going with the screen locked.
 - **Themes:** choose yin-yang, enso, om, dharma wheel or cross when you first open the app. Each has its own colors, and most start with a matching book.
@@ -38,7 +38,7 @@ If the symbol disappears after a while, set the app's battery use to **Unrestric
 | Dhammapada | F. Max Müller (1881) | [Project Gutenberg](https://www.gutenberg.org/ebooks/2017) |
 | Bible | World English Bible | [eBible.org](https://ebible.org/) |
 
-The full texts are generated from these sources by `tools/make_books.py`, which also marks a selection of passages for random sentences. To change the marks, edit the lists in that script and run it again. The Upanishads source covers the Isa, Katha and Kena, and its commentary is shown in a quieter style.
+`tools/make_books.py` generates these as EPUB files from the sources above, and the app downloads them from [this release](https://github.com/mateotomas2/numinos/releases/tag/books-1), checking each file's fingerprint. The script also marks a selection of passages for random sentences. To change the marks, edit the lists in that script and run it again. The Upanishads source covers the Isa, Katha and Kena, and its commentary is shown in a quieter style.
 
 ## Build
 

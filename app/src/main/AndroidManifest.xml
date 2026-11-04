@@ -35,6 +35,15 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:theme="@style/FloatingReader" />
+
         <service
             android:name=".OverlayService"
             android:exported="false"

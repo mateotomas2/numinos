@@ -6,17 +6,11 @@ import android.animation.ValueAnimator
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
-import android.text.Spannable
-import android.text.SpannableString
 import android.text.TextUtils
-import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
-import android.text.style.UnderlineSpan
 import android.transition.ChangeBounds
 import android.transition.Fade
 import android.transition.TransitionManager
@@ -31,20 +25,18 @@ import android.view.ViewAnimationUtils
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
-import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ListView
 import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private enum class Page { HOME, SHELF, CONTENTS, READER, NOTEBOOK, JAR }
+private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
 
 private const val HOLD_START = "Let go to start, slide sideways to cancel"
 
@@ -80,18 +72,17 @@ class Panel(
     private val backStack = ArrayDeque<Page>()
     private var sentenceHost: FrameLayout? = null
 
-    private var book: Book? = null
-    private var chapter = 0
-    private var passages: List<Passage> = emptyList()
-    private var readerScroll: ScrollView? = null
-    private var readerColumn: LinearLayout? = null
-    private var pendingPassage = -1
-    private var flashPassage = false
-
     private var pill: LinearLayout? = null
     private var touchX = 0f
     private var touchY = 0f
     private var swallowTouch = false
+    private var suspended = false
+    private val windowParams = WindowManager.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT,
+    )
 
     private val root = object : FrameLayout(context) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -137,19 +128,36 @@ class Panel(
         val width = min(context.resources.displayMetrics.widthPixels - context.dp(24), context.dp(380))
         root.addView(card, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         render()
+        BookLoader.listener = { if (page == Page.SHELF || page == Page.BOOKSELLER) render() }
         root.onBackGesture { goBack() }
-        windows.addView(
-            root,
-            WindowManager.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                PixelFormat.TRANSLUCENT,
-            ),
-        )
+        windows.addView(root, windowParams)
         card.visibility = View.INVISIBLE
         root.animate().alpha(1f).setDuration(260).start()
         card.post { reveal(opening = true) }
+    }
+
+    /** Steps aside for the reader, keeping this window's page and sentence for when you come back. */
+    fun suspendForReader() {
+        suspended = true
+        dismissPill()
+        root.animate().cancel()
+        root.animate().alpha(0f).setStartDelay(0).setDuration(140).withEndAction {
+            if (suspended) runCatching { windows.removeViewImmediate(root) }
+        }.start()
+    }
+
+    fun resumeFromReader() {
+        if (!suspended || closing) return
+        suspended = false
+        root.animate().cancel()
+        if (!root.isAttachedToWindow) {
+            windows.addView(root, windowParams)
+            root.onBackGesture { goBack() }
+        }
+        // The window is redrawn so the tilted book stands straight and anything kept while reading shows up.
+        store.pinned()?.let { sentence = it }
+        render()
+        root.animate().alpha(1f).setStartDelay(0).setDuration(220).start()
     }
 
     private fun goBack() {
@@ -157,10 +165,7 @@ class Panel(
             pill != null -> dismissPill()
             arranging != null -> arrange(null)
             backStack.isNotEmpty() -> {
-                savePlace()
                 page = backStack.removeLast()
-                // Coming back from the contents returns to the same place on the page.
-                if (page == Page.READER) book?.let { pendingPassage = store.place(it.id).second }
                 morph()
             }
             else -> close()
@@ -169,14 +174,12 @@ class Panel(
 
     private fun navigate(target: Page) {
         arranging = null
-        savePlace()
         backStack.addLast(page)
         page = target
         morph()
     }
 
     private fun returnHome() {
-        savePlace()
         backStack.clear()
         page = Page.HOME
         morph()
@@ -190,7 +193,6 @@ class Panel(
     fun close(then: () -> Unit = {}) {
         if (closing) return
         closing = true
-        savePlace()
         dismissPill()
         openDialogs.forEach { runCatching { it.dismiss() } }
         root.animate().alpha(0f).setStartDelay(90).setDuration(240).start()
@@ -203,6 +205,7 @@ class Panel(
 
     fun dismissNow() {
         closing = true
+        BookLoader.listener = null
         store.videoCategory = category
         store.videoScroll = videoScroll
         store.chipScroll = chipScroll
@@ -262,15 +265,14 @@ class Panel(
         breath?.cancel()
         sentenceHost = null
         card.removeAllViews()
-        val tall = page != Page.HOME && page != Page.SHELF
+        val tall = page == Page.NOTEBOOK || page == Page.JAR
         card.layoutParams = (card.layoutParams as FrameLayout.LayoutParams).apply {
             height = if (tall) (context.resources.displayMetrics.heightPixels * 0.86f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
         }
         when (page) {
             Page.HOME -> renderHome()
             Page.SHELF -> renderShelf()
-            Page.CONTENTS -> renderContents()
-            Page.READER -> renderReader()
+            Page.BOOKSELLER -> renderBookseller()
             Page.NOTEBOOK -> renderNotebook()
             Page.JAR -> renderJar()
         }
@@ -376,11 +378,28 @@ class Panel(
 
     private fun openSource(item: Sentence) {
         val owner = store.book(item.bookId)
-        if (owner == null) {
-            navigate(Page.NOTEBOOK)
-        } else {
-            openReader(owner, item.chapter, item.passage, flash = true)
+        when {
+            owner == null -> navigate(Page.NOTEBOOK)
+            store.isDownloaded(owner) -> openBook(owner, item.locator)
+            store.isOnShelf(owner) -> tellDownloadState(owner)
+            else -> navigate(Page.BOOKSELLER)
         }
+    }
+
+    private fun openBook(item: Book, locator: String?) {
+        context.startActivity(ReaderActivity.intent(context, item.id, locator))
+        suspendForReader()
+    }
+
+    private fun tellDownloadState(item: Book) {
+        val percent = BookLoader.progressOf(item.id)
+        val message = if (percent == null) {
+            BookLoader.fetch(context, item)
+            "Downloading ${item.title}…"
+        } else {
+            "Downloading ${item.title}: $percent%"
+        }
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     /** Swaps the sentence without touching the rest of the window, except to make room for a longer one. */
@@ -836,6 +855,7 @@ class Panel(
     // The bookshelf
 
     private fun renderShelf() {
+        BookLoader.fetchShelf(context)
         card.addView(header("Library"))
         val shelf = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -843,25 +863,36 @@ class Panel(
         }
         val widths = listOf(58, 62, 52, 70)
         val heights = listOf(190, 172, 182, 204)
-        val books = LinearLayout(context).apply {
+        val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            gravity = Gravity.BOTTOM
             isBaselineAligned = false
-            store.books.forEachIndexed { i, item ->
+            minimumHeight = context.dp(204)
+            store.shelfBooks().forEach { item ->
                 val spine = SpineView(context, item.title, SPINE_COLORS[item.id] ?: ACCENT)
                 spine.pivotX = 0f
+                // A book still downloading stands faded on the shelf.
+                if (!store.isDownloaded(item)) spine.alpha = 0.45f
                 spine.setOnClickListener {
-                    tiltOut(spine) {
-                        val (savedChapter, savedPassage) = store.place(item.id)
-                        openReader(item, savedChapter, savedPassage, flash = false)
+                    if (store.isDownloaded(item)) {
+                        tiltOut(spine) { openBook(item, null) }
+                    } else {
+                        tellDownloadState(item)
                     }
                 }
-                addView(spine, LinearLayout.LayoutParams(context.dp(widths[i % widths.size]), context.dp(heights[i % heights.size])).apply {
+                spine.setOnLongClickListener {
+                    confirmRemove(item)
+                    true
+                }
+                addView(spine, LinearLayout.LayoutParams(context.dp(widths[item.shelf % widths.size]), context.dp(heights[item.shelf % heights.size])).apply {
                     marginEnd = context.dp(4)
                 })
             }
+            addView(context.iconButton(R.drawable.ic_add, "Add a book", SOFT) { navigate(Page.BOOKSELLER) }.apply {
+                background = rounded(CARD, context.dp(5).toFloat(), context.dp(1), LINE)
+            }, LinearLayout.LayoutParams(context.dp(46), context.dp(128)).apply { marginStart = context.dp(4) })
         }
-        shelf.addView(books, LinearLayout.LayoutParams(-1, -2))
+        shelf.addView(horizontal(row), LinearLayout.LayoutParams(-1, -2))
         shelf.addView(plank())
         val keepsakes = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -890,6 +921,69 @@ class Panel(
         card.addView(shelf)
     }
 
+    private fun confirmRemove(item: Book) {
+        context.dialogBuilder()
+            .setTitle("Remove ${item.title}?")
+            .setMessage("It leaves your shelf and stops giving random sentences. Your liked passages stay in the jar.")
+            .setPositiveButton("Remove") { _, _ ->
+                store.removeFromShelf(item)
+                if (store.pinned()?.bookId == item.id) store.setPinned(null)
+                if (sentence?.bookId == item.id && store.liked().none { it.key == sentence?.key }) sentence = store.sentenceToShow()
+                render()
+            }
+            .setNegativeButton("Keep", null)
+            .create()
+            .showInPanel()
+    }
+
+    // The bookseller's table: books you can add
+
+    private fun renderBookseller() {
+        card.addView(header("Add a book"))
+        val rows = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, context.dp(6), pad, pad)
+        }
+        store.books.forEach { item ->
+            val onShelf = store.isOnShelf(item)
+            val percent = BookLoader.progressOf(item.id)
+            val status = when {
+                percent != null -> "Downloading $percent%"
+                onShelf && BookLoader.hasFailed(item.id) -> "Download failed, tap to retry"
+                onShelf && store.isDownloaded(item) -> "On your shelf"
+                onShelf -> "Waiting to download"
+                else -> "Add · ${sizeLabel(item.size)}"
+            }
+            rows.addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isBaselineAligned = false
+                setPadding(context.dp(12), context.dp(10), context.dp(12), context.dp(10))
+                background = rounded(CARD, context.dp(12).toFloat(), context.dp(1), LINE)
+                addView(View(context).apply {
+                    background = rounded(SPINE_COLORS[item.id] ?: ACCENT, context.dp(3).toFloat())
+                }, LinearLayout.LayoutParams(context.dp(14), context.dp(52)).apply { marginEnd = context.dp(12) })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(context.label(item.title, 16f, INK, serif = true))
+                    addView(context.label(item.credit, 11.5f, SOFT))
+                    addView(context.label(status, 12.5f, if (onShelf) SOFT else ACCENT, bold = !onShelf).apply { setPadding(0, context.dp(3), 0, 0) })
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+                if (!onShelf || BookLoader.hasFailed(item.id)) {
+                    tappable {
+                        store.addToShelf(item)
+                        BookLoader.fetch(context, item)
+                        render()
+                    }
+                }
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = context.dp(8) })
+        }
+        card.addView(rows)
+    }
+
+    private fun sizeLabel(bytes: Long) =
+        if (bytes >= 1_000_000) String.format(Locale.ROOT, "%.1f MB", bytes / 1_000_000.0) else "${bytes / 1000} KB"
+
     private fun plank() = View(context).apply {
         background = rounded(SOFT, context.dp(3).toFloat())
         elevation = context.dp(2).toFloat()
@@ -899,199 +993,6 @@ class Panel(
     private fun tiltOut(view: View, then: () -> Unit) {
         view.animate().translationY(-context.dp(14).toFloat()).rotation(view.rotation - 5f).setDuration(190)
             .withEndAction(then).start()
-    }
-
-    // Contents of a book
-
-    private fun renderContents() {
-        val owner = book ?: return
-        card.addView(header(owner.title))
-        val list = ListView(context).apply {
-            divider = null
-            isFastScrollEnabled = true
-            adapter = object : BaseAdapter() {
-                override fun getCount() = owner.chapters.size
-                override fun getItem(position: Int) = owner.chapters[position]
-                override fun getItemId(position: Int) = position.toLong()
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    val row = convertView as? TextView ?: context.label("", 15f).apply {
-                        minHeight = context.dp(46)
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(pad + context.dp(2), 0, context.dp(28), 0)
-                    }
-                    row.text = owner.chapters[position]
-                    row.setTextColor(if (position == chapter) ACCENT else INK)
-                    return row
-                }
-            }
-            setOnItemClickListener { _, _, position, _ ->
-                backStack.removeLastOrNull()
-                page = Page.READER
-                chapter = position
-                loadChapter()
-                pendingPassage = -1
-                morph()
-            }
-            setSelection((chapter - 3).coerceAtLeast(0))
-        }
-        card.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
-    }
-
-    // Reading
-
-    private fun openReader(owner: Book, targetChapter: Int, targetPassage: Int, flash: Boolean) {
-        savePlace()
-        book = owner
-        chapter = targetChapter.coerceIn(0, owner.chapters.lastIndex)
-        loadChapter()
-        pendingPassage = targetPassage
-        flashPassage = flash
-        if (page == Page.READER) {
-            morph()
-        } else {
-            backStack.addLast(page)
-            page = Page.READER
-            morph()
-        }
-    }
-
-    private fun loadChapter() {
-        passages = store.chapter(book?.id ?: return, chapter)
-    }
-
-    private fun firstVisiblePassage(): Int {
-        val column = readerColumn ?: return 0
-        val top = readerScroll?.scrollY ?: 0
-        for (i in 0 until column.childCount) {
-            if (column.getChildAt(i).bottom > top) return i.coerceAtMost(passages.lastIndex.coerceAtLeast(0))
-        }
-        return 0
-    }
-
-    private fun savePlace() {
-        val owner = book ?: return
-        if (page == Page.READER && readerColumn != null) store.setPlace(owner.id, chapter, firstVisiblePassage())
-    }
-
-    private fun renderReader() {
-        val owner = book ?: return
-        card.addView(header(owner.chapters[chapter], owner.title) {
-            if (owner.marks.isNotEmpty()) {
-                addView(context.iconButton(R.drawable.ic_mark, "Next marked passage", SOFT) { nextMark(owner) }, LinearLayout.LayoutParams(context.dp(42), context.dp(42)))
-            }
-            addView(context.iconButton(R.drawable.ic_list, "Contents", SOFT) { navigate(Page.CONTENTS) }, LinearLayout.LayoutParams(context.dp(42), context.dp(42)))
-        })
-        val column = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, context.dp(4), pad, pad)
-        }
-        val chapterMarks = owner.marks.filter { it.chapter == chapter }
-        passages.forEachIndexed { index, passage ->
-            column.addView(passageView(owner, index, passage, chapterMarks.filter { it.passage == index }))
-        }
-        val scroll = ScrollView(context).apply {
-            overScrollMode = View.OVER_SCROLL_NEVER
-            addView(column)
-        }
-        readerColumn = column
-        readerScroll = scroll
-        card.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        card.addView(divider())
-        card.addView(readerControls(owner))
-        val target = pendingPassage
-        val flash = flashPassage
-        pendingPassage = -1
-        flashPassage = false
-        if (target in passages.indices) {
-            scroll.post {
-                val view = column.getChildAt(target) ?: return@post
-                scroll.scrollTo(0, (view.top - context.dp(12)).coerceAtLeast(0))
-                if (flash) flash(view)
-            }
-        }
-    }
-
-    private fun flash(view: View) {
-        view.setBackgroundColor(LINE)
-        ValueAnimator.ofArgb(LINE, LINE and 0x00FFFFFF).apply {
-            startDelay = 500
-            duration = 1400
-            addUpdateListener { view.setBackgroundColor(it.animatedValue as Int) }
-            start()
-        }
-    }
-
-    private fun passageView(owner: Book, index: Int, passage: Passage, marks: List<Sentence>): View {
-        val size = store.readerTextSp.toFloat()
-        val prefix = if (passage.label.isEmpty() || passage.commentary) "" else "${passage.label}  "
-        val styled = SpannableString(prefix + passage.text)
-        if (prefix.isNotEmpty()) {
-            styled.setSpan(RelativeSizeSpan(0.62f), 0, prefix.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            styled.setSpan(ForegroundColorSpan(SOFT), 0, prefix.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        marks.forEach {
-            styled.setSpan(UnderlineSpan(), prefix.length + it.start, prefix.length + it.end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        val text = context.label("", if (passage.commentary) size - 3f else size, if (passage.commentary) SOFT else INK, serif = !passage.commentary).apply {
-            this.text = styled
-            setLineSpacing(0f, 1.26f)
-        }
-        return LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            isBaselineAligned = false
-            setPadding(0, context.dp(6), 0, context.dp(8))
-            // The pencil line in the margin, as if someone read this book before you.
-            addView(View(context).apply {
-                background = rounded(if (marks.isEmpty()) Color.TRANSPARENT else ACCENT, context.dp(1).toFloat())
-                alpha = 0.6f
-            }, LinearLayout.LayoutParams(context.dp(2), -1).apply { marginEnd = context.dp(8) })
-            addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            setOnLongClickListener {
-                showPill(store.passageSentence(owner, chapter, index, passage))
-                true
-            }
-        }
-    }
-
-    private fun readerControls(owner: Book) = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(context.dp(6), context.dp(2), context.dp(6), context.dp(2))
-        fun goTo(next: Int) {
-            savePlace()
-            chapter = next
-            loadChapter()
-            pendingPassage = -1
-            morph()
-        }
-        addView(context.iconButton(R.drawable.ic_previous, "Previous chapter", if (chapter > 0) INK else LINE) {
-            if (chapter > 0) goTo(chapter - 1)
-        }, LinearLayout.LayoutParams(context.dp(44), context.dp(44)))
-        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-        fun textSize(name: String, description: String, change: Int) = context.label(name, 15f, INK, serif = true).apply {
-            gravity = Gravity.CENTER
-            contentDescription = description
-            tappable {
-                val keep = firstVisiblePassage()
-                store.readerTextSp = (store.readerTextSp + change).coerceIn(14, 30)
-                pendingPassage = keep
-                render()
-            }
-        }
-        addView(textSize("A−", "Smaller text", -2), LinearLayout.LayoutParams(context.dp(48), context.dp(44)))
-        addView(textSize("A+", "Larger text", 2), LinearLayout.LayoutParams(context.dp(48), context.dp(44)))
-        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-        addView(context.iconButton(R.drawable.ic_next, "Next chapter", if (chapter < owner.chapters.lastIndex) INK else LINE) {
-            if (chapter < owner.chapters.lastIndex) goTo(chapter + 1)
-        }, LinearLayout.LayoutParams(context.dp(44), context.dp(44)))
-    }
-
-    /** Follows the pencil marks: jumps to the next one after what's on screen, wrapping around at the end. */
-    private fun nextMark(owner: Book) {
-        val here = firstVisiblePassage()
-        val ordered = owner.marks.sortedWith(compareBy({ it.chapter }, { it.passage }))
-        val next = ordered.firstOrNull { it.chapter > chapter || (it.chapter == chapter && it.passage > here) } ?: ordered.first()
-        openReader(owner, next.chapter, next.passage, flash = true)
     }
 
     // The notebook and the jar
@@ -1121,12 +1022,24 @@ class Panel(
         items.forEachIndexed { index, item ->
             rows.addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(context.dp(14), context.dp(12), context.dp(14), context.dp(12))
+                setPadding(context.dp(14), context.dp(12), context.dp(if (tilted) 6 else 14), context.dp(if (tilted) 4 else 12))
                 background = rounded(CARD, context.dp(if (tilted) 3 else 12).toFloat(), context.dp(1), LINE)
                 if (tilted) rotation = if (index % 2 == 0) -0.9f else 0.9f
                 addView(context.label(item.text, 16f, INK, serif = true).apply { setLineSpacing(0f, 1.16f) })
                 val source = if (item.bookId == null) "" else sourceLine(item)
-                if (source.isNotEmpty()) addView(context.label(source, 11.5f, SOFT).apply { setPadding(0, context.dp(6), 0, 0) })
+                if (tilted) {
+                    addView(LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        addView(context.label(source, 11.5f, SOFT), LinearLayout.LayoutParams(0, -2, 1f))
+                        addView(context.iconButton(R.drawable.ic_delete, "Remove from jar", SOFT) {
+                            store.toggleLiked(item)
+                            render()
+                        }, LinearLayout.LayoutParams(context.dp(40), context.dp(40)))
+                    })
+                } else if (source.isNotEmpty()) {
+                    addView(context.label(source, 11.5f, SOFT).apply { setPadding(0, context.dp(6), 0, 0) })
+                }
                 tappable {
                     sentence = item
                     returnHome()

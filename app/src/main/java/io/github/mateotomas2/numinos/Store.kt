@@ -19,34 +19,29 @@ data class Book(
     val title: String,
     val credit: String,
     val shelf: Int,
-    val chapters: List<String>,
+    val url: String,
+    val sha256: String,
+    val size: Long,
     val marks: List<Sentence>,
 )
 
-data class Passage(val label: String, val text: String, val commentary: Boolean)
-
-/** A line to show: from a book when [bookId] is set, otherwise written by you. */
+/** A line to show: from a book when [bookId] is set, otherwise written by you. [locator] is its place in the book. */
 data class Sentence(
     val key: String,
     val text: String,
     val source: String,
     val ref: String,
     val bookId: String? = null,
-    val chapter: Int = -1,
-    val passage: Int = -1,
-    val start: Int = -1,
-    val end: Int = -1,
+    val locator: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("key", key).put("text", text).put("source", source).put("ref", ref)
-        .put("bookId", bookId).put("chapter", chapter).put("passage", passage)
-        .put("start", start).put("end", end)
+        .put("bookId", bookId).put("locator", locator)
 
     companion object {
         fun fromJson(json: JSONObject) = Sentence(
             json.getString("key"), json.getString("text"), json.getString("source"), json.getString("ref"),
-            json.optString("bookId").ifEmpty { null }, json.optInt("chapter", -1), json.optInt("passage", -1),
-            json.optInt("start", -1), json.optInt("end", -1),
+            json.optString("bookId").ifEmpty { null }, json.optString("locator").ifEmpty { null },
         )
     }
 }
@@ -72,66 +67,64 @@ class Store private constructor(context: Context) {
         }
     }
 
+    /** Every book available to add. The catalog ships with the app, and the texts are downloaded. */
     val books: List<Book> by lazy {
-        app.assets.list("books").orEmpty().map { folder ->
-            val json = JSONObject(readAsset("books/$folder/book.json"))
+        val items = JSONObject(app.assets.open("catalog.json").bufferedReader().use { it.readText() }).getJSONArray("books")
+        List(items.length()) { i ->
+            val json = items.getJSONObject(i)
             val id = json.getString("id")
             val title = json.getString("title")
-            val chapters = json.getJSONArray("chapters")
             val marks = json.getJSONArray("marks")
             Book(
-                id, title, json.getString("credit"), json.getInt("shelf"),
-                List(chapters.length()) { chapters.getString(it) },
-                List(marks.length()) { i ->
-                    val mark = marks.getJSONObject(i)
-                    val chapter = mark.getInt("chapter")
-                    val passage = mark.getInt("passage")
-                    val start = mark.getInt("start")
-                    Sentence(
-                        "$id:m:$chapter:$passage:$start", mark.getString("text"), title, mark.getString("ref"),
-                        id, chapter, passage, start, mark.getInt("end"),
-                    )
+                id, title, json.getString("credit"), json.getInt("shelf"), json.getString("url"),
+                json.getString("sha256"), json.getLong("size"),
+                List(marks.length()) { m ->
+                    val mark = marks.getJSONObject(m)
+                    val highlight = mark.getString("highlight")
+                    val href = mark.getString("href")
+                    val fragment = mark.getString("fragment")
+                    val locator = JSONObject()
+                        .put("href", href)
+                        .put("type", "application/xhtml+xml")
+                        .put("locations", JSONObject().put("fragments", JSONArray().put(fragment)))
+                        .put("text", JSONObject().put("highlight", highlight))
+                    Sentence("$id:m:$href#$fragment:${highlight.hashCode()}", mark.getString("text"), title, mark.getString("ref"), id, locator.toString())
                 },
             )
         }.sortedBy { it.shelf }
     }
 
-    private fun readAsset(path: String) = app.assets.open(path).bufferedReader().use { it.readText() }
-
     fun book(id: String?): Book? = books.firstOrNull { it.id == id }
 
-    /** One chapter's text, read only when it's opened because the books are large. */
-    fun chapter(bookId: String, index: Int): List<Passage> {
-        val items = JSONArray(readAsset("books/$bookId/c$index.json"))
-        return List(items.length()) { i ->
-            val item = items.getJSONObject(i)
-            Passage(item.getString("l"), item.getString("t"), item.optInt("c") == 1)
-        }
+    fun bookFile(book: Book) = File(File(app.filesDir, "books"), "${book.id}.epub")
+
+    fun isDownloaded(book: Book) = bookFile(book).exists()
+
+    private fun shelfIds(): Set<String> = prefs.getStringSet("shelf", null) ?: startingShelf(Symbol.of(symbolId))
+
+    private fun startingShelf(symbol: Symbol): Set<String> =
+        symbol.bookId?.let { setOf(it) } ?: books.map { it.id }.toSet()
+
+    fun shelfBooks(): List<Book> = shelfIds().let { ids -> books.filter { it.id in ids } }
+
+    fun isOnShelf(book: Book) = book.id in shelfIds()
+
+    fun addToShelf(book: Book) = prefs.edit().putStringSet("shelf", shelfIds() + book.id).apply()
+
+    /** Your liked passages stay in the jar, and your place in the book is kept in case you add it back. */
+    fun removeFromShelf(book: Book) {
+        prefs.edit().putStringSet("shelf", shelfIds() - book.id).apply()
+        bookFile(book).delete()
     }
 
-    /** A whole verse or paragraph as a sentence, for liking or fixing it from the reader. */
-    fun passageSentence(book: Book, chapter: Int, index: Int, passage: Passage): Sentence {
-        val title = book.chapters[chapter]
-        val ref = when {
-            passage.label.isEmpty() -> title
-            book.id == "bible" -> "$title:${passage.label}"
-            passage.label.first().isDigit() -> "$title, verse ${passage.label}"
-            else -> "$title, ${passage.label}"
-        }
-        return Sentence("${book.id}:p:$chapter:$index", passage.text, book.title, ref, book.id, chapter, index)
-    }
+    /** Where you stopped reading, in Readium's own format. */
+    fun place(bookId: String): String? = prefs.getString("place_$bookId", null)
 
-    fun place(bookId: String): Pair<Int, Int> {
-        val parts = prefs.getString("place_$bookId", null)?.split(":") ?: return 0 to 0
-        return parts[0].toInt() to parts[1].toInt()
-    }
+    fun setPlace(bookId: String, locator: String) = prefs.edit().putString("place_$bookId", locator).apply()
 
-    fun setPlace(bookId: String, chapter: Int, passage: Int) =
-        prefs.edit().putString("place_$bookId", "$chapter:$passage").apply()
-
-    var readerTextSp: Int
-        get() = prefs.getInt("readerTextSp", 18)
-        set(value) = prefs.edit().putInt("readerTextSp", value).apply()
+    var readerFontScale: Double
+        get() = prefs.getFloat("readerFontScale", 1f).toDouble()
+        set(value) = prefs.edit().putFloat("readerFontScale", value.toFloat()).apply()
 
     // Sentences
 
@@ -179,8 +172,8 @@ class Store private constructor(context: Context) {
         val hidden = hiddenKeys()
         val chosen = (if (isSourceOn(SOURCE_MINE)) mySentences() else emptyList()) +
             (if (isSourceOn(SOURCE_JAR)) liked() else emptyList()) +
-            books.filter { isSourceOn(it.id) }.flatMap { it.marks }
-        val pool = chosen.filter { it.key !in hidden }.distinctBy { it.key }.ifEmpty { allMarks() }
+            shelfBooks().filter { isSourceOn(it.id) }.flatMap { it.marks }
+        val pool = chosen.filter { it.key !in hidden }.distinctBy { it.key }
         return pool.filter { it.key != excludeKey }.ifEmpty { pool }.randomOrNull()
     }
 
@@ -267,10 +260,9 @@ class Store private constructor(context: Context) {
     /** A line to preview a theme with, from the book that goes with it. */
     fun sampleSentence(symbol: Symbol): Sentence? = (book(symbol.bookId)?.marks ?: allMarks()).randomOrNull()
 
-    /** First-run default: random sentences come from the theme's book and your own. */
+    /** First-run default: the shelf starts with the theme's book, or with all of them for a theme without one. */
     fun useBookOf(symbol: Symbol) {
-        val bookId = symbol.bookId ?: return
-        books.forEach { setSourceOn(it.id, it.id == bookId) }
+        prefs.edit().putStringSet("shelf", startingShelf(symbol)).apply()
     }
 
     /** Erases everything the user added or chose. */
@@ -278,6 +270,7 @@ class Store private constructor(context: Context) {
     fun reset() {
         prefs.edit().clear().commit()
         File(app.cacheDir, "thumbs").deleteRecursively()
+        File(app.filesDir, "books").deleteRecursively()
         applyLook()
     }
 
