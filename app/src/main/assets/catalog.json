@@ -1,0 +1,475 @@
+{
+ "books": [
+  {
+   "id": "tao",
+   "title": "Tao Te Ching",
+   "credit": "translated by James Legge (1891), public domain",
+   "shelf": 0,
+   "url": "https://github.com/mateotomas2/numinos/releases/download/books-1/tao.epub",
+   "sha256": "2d5185eabb120a63db4655e8a302dd2d021ae4cd9f0e65b2a3fe464c56459272",
+   "size": 57843,
+   "marks": [
+    {
+     "ref": "Chapter 1",
+     "text": "The Tao that can be trodden is not the enduring and unchanging Tao. The name that can be named is not the enduring and unchanging name.",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p0",
+     "highlight": "The Tao that can be trodden is not the enduring and unchanging Tao. The name that can be named is not the enduring and unchanging name."
+    },
+    {
+     "ref": "Chapter 8",
+     "text": "The highest excellence is like (that of) water.",
+     "href": "OEBPS/c7.xhtml",
+     "fragment": "p0",
+     "highlight": "The highest excellence is like (that of) water."
+    },
+    {
+     "ref": "Chapter 11",
+     "text": "The thirty spokes unite in the one nave; but it is on the empty space (for the axle), that the use of the wheel depends.",
+     "href": "OEBPS/c10.xhtml",
+     "fragment": "p0",
+     "highlight": "The thirty spokes unite in the one nave; but it is on the empty space (for the axle), that the use of the wheel depends."
+    },
+    {
+     "ref": "Chapter 16",
+     "text": "When things (in the vegetable world) have displayed their luxuriant growth, we see each of them return to its root.",
+     "href": "OEBPS/c15.xhtml",
+     "fragment": "p0",
+     "highlight": "When things (in the vegetable world) have displayed their luxuriant growth, we see each of them return to its root."
+    },
+    {
+     "ref": "Chapter 33",
+     "text": "He who knows other men is discerning; he who knows himself is intelligent.",
+     "href": "OEBPS/c32.xhtml",
+     "fragment": "p0",
+     "highlight": "He who knows other men is discerning; he who knows himself is intelligent."
+    },
+    {
+     "ref": "Chapter 33",
+     "text": "He who overcomes others is strong; he who overcomes himself is mighty.",
+     "href": "OEBPS/c32.xhtml",
+     "fragment": "p0",
+     "highlight": "He who overcomes others is strong; he who overcomes himself is mighty."
+    },
+    {
+     "ref": "Chapter 33",
+     "text": "He who is satisfied with his lot is rich",
+     "href": "OEBPS/c32.xhtml",
+     "fragment": "p0",
+     "highlight": "He who is satisfied with his lot is rich;"
+    },
+    {
+     "ref": "Chapter 37",
+     "text": "The Tao in its regular course does nothing (for the sake of doing it), and so there is nothing which it does not do.",
+     "href": "OEBPS/c36.xhtml",
+     "fragment": "p0",
+     "highlight": "The Tao in its regular course does nothing (for the sake of doing it), and so there is nothing which it does not do."
+    },
+    {
+     "ref": "Chapter 43",
+     "text": "The softest thing in the world dashes against and overcomes the hardest",
+     "href": "OEBPS/c42.xhtml",
+     "fragment": "p0",
+     "highlight": "The softest thing in the world dashes against and overcomes the hardest;"
+    },
+    {
+     "ref": "Chapter 47",
+     "text": "Without going outside his door, one understands (all that takes place) under the sky; without looking out from his window, one sees the Tao of Heaven.",
+     "href": "OEBPS/c46.xhtml",
+     "fragment": "p0",
+     "highlight": "Without going outside his door, one understands (all that takes place) under the sky; without looking out from his window, one sees the Tao of Heaven."
+    },
+    {
+     "ref": "Chapter 48",
+     "text": "He who devotes himself to learning (seeks) from day to day to increase (his knowledge); he who devotes himself to the Tao (seeks) from day to day to diminish (his doing).",
+     "href": "OEBPS/c47.xhtml",
+     "fragment": "p0",
+     "highlight": "He who devotes himself to learning (seeks) from day to day to increase (his knowledge); he who devotes himself to the Tao (seeks) from day to day to diminish (his doing)."
+    },
+    {
+     "ref": "Chapter 56",
+     "text": "He who knows (the Tao) does not (care to) speak (about it); he who is (ever ready to) speak about it does not know it.",
+     "href": "OEBPS/c55.xhtml",
+     "fragment": "p0",
+     "highlight": "He who knows (the Tao) does not (care to) speak (about it); he who is (ever ready to) speak about it does not know it."
+    },
+    {
+     "ref": "Chapter 64",
+     "text": "The journey of a thousand li commenced with a single step.",
+     "href": "OEBPS/c63.xhtml",
+     "fragment": "p1",
+     "highlight": "the journey of a thousand li commenced with a single step."
+    },
+    {
+     "ref": "Chapter 76",
+     "text": "Man at his birth is supple and weak; at his death, firm and strong.",
+     "href": "OEBPS/c75.xhtml",
+     "fragment": "p0",
+     "highlight": "Man at his birth is supple and weak; at his death, firm and strong."
+    },
+    {
+     "ref": "Chapter 78",
+     "text": "There is nothing in the world more soft and weak than water",
+     "href": "OEBPS/c77.xhtml",
+     "fragment": "p0",
+     "highlight": "There is nothing in the world more soft and weak than water,"
+    },
+    {
+     "ref": "Chapter 81",
+     "text": "Sincere words are not fine; fine words are not sincere.",
+     "href": "OEBPS/c80.xhtml",
+     "fragment": "p0",
+     "highlight": "Sincere words are not fine; fine words are not sincere."
+    }
+   ]
+  },
+  {
+   "id": "upanishads",
+   "title": "Upanishads",
+   "credit": "translated by Swami Paramananda (1919), public domain",
+   "shelf": 1,
+   "url": "https://github.com/mateotomas2/numinos/releases/download/books-1/upanishads.epub",
+   "sha256": "3b358dcb59775fa7fbf95f47f9e821e404958564bf67041e0ef09ef01c5770c0",
+   "size": 41713,
+   "marks": [
+    {
+     "ref": "Isa, verse 1",
+     "text": "All this, whatsoever exists in the universe, should be covered by the Lord. Having renounced (the unreal), enjoy (the Real). Do not covet the wealth of any man.",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p6",
+     "highlight": "All this, whatsoever exists in the universe, should be covered by the Lord. Having renounced (the unreal), enjoy (the Real). Do not covet the wealth of any man."
+    },
+    {
+     "ref": "Isa, verse 6",
+     "text": "He who sees all beings in the Self and the Self in all beings, he never turns away from It (the Self).",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p19",
+     "highlight": "He who sees all beings in the Self and the Self in all beings, he never turns away from It (the Self)."
+    },
+    {
+     "ref": "Isa, verse 7",
+     "text": "He who perceives all beings as the Self for him how can there be delusion or grief, when he sees this oneness (everywhere)?",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p20",
+     "highlight": "He who perceives all beings as the Self for him how can there be delusion or grief, when he sees this oneness (everywhere)?"
+    },
+    {
+     "ref": "Katha, part 2, verse 20",
+     "text": "The Self is subtler than the subtle, greater than the great; It dwells in the heart of each living being. He who is free from desire and free from grief, with mind and senses tranquil, beholds the glory of the Atman.",
+     "href": "OEBPS/c2.xhtml",
+     "fragment": "p28",
+     "highlight": "The Self is subtler than the subtle, greater than the great; It dwells in the heart of each living being. He who is free from desire and free from grief, with mind and senses tranquil, beholds the glory of the Atman."
+    },
+    {
+     "ref": "Katha, part 3, verse 3",
+     "text": "Know the Atman (Self) as the lord of the chariot, and the body as the chariot. Know also the intellect to be the driver and mind the reins.",
+     "href": "OEBPS/c3.xhtml",
+     "fragment": "p4",
+     "highlight": "Know the Atman (Self) as the lord of the chariot, and the body as the chariot. Know also the intellect to be the driver and mind the reins."
+    },
+    {
+     "ref": "Katha, part 3, verse 14",
+     "text": "Arise! Awake! Having reached the Great Ones (illumined Teachers), gain understanding. The path is as sharp as a razor, impassable and difficult to travel, so the wise declare.",
+     "href": "OEBPS/c3.xhtml",
+     "fragment": "p21",
+     "highlight": "Arise! Awake! Having reached the Great Ones (illumined Teachers), gain understanding. The path is as sharp as a razor, impassable and difficult to travel, so the wise declare."
+    },
+    {
+     "ref": "Katha, part 4, verse 1",
+     "text": "The Self-existent created the senses out-going; for this reason man sees the external, but not the inner Atman (Self). Some wise man, however, desiring immortality, with eyes turned away (from the external) sees the Atman within.",
+     "href": "OEBPS/c4.xhtml",
+     "fragment": "p0",
+     "highlight": "The Self-existent created the senses out-going; for this reason man sees the external, but not the inner Atman (Self). Some wise man, however, desiring immortality, with eyes turned away (from the external) sees the Atman within."
+    },
+    {
+     "ref": "Katha, part 4, verse 10",
+     "text": "What is here (in the visible world), that is there (in the invisible); he who sees difference (between visible and invisible) goes from death to death.",
+     "href": "OEBPS/c4.xhtml",
+     "fragment": "p15",
+     "highlight": "What is here (in the visible world), that is there (in the invisible); he who sees difference (between visible and invisible) goes from death to death."
+    },
+    {
+     "ref": "Katha, part 5, verse 8",
+     "text": "The Being who remains awake while all sleep, who grants all desires, That is pure, That is Brahman, That alone is said to be immortal. On That all the worlds rest. None goes beyond That. This verily is That.",
+     "href": "OEBPS/c5.xhtml",
+     "fragment": "p9",
+     "highlight": "The Being who remains awake while all sleep, who grants all desires, That is pure, That is Brahman, That alone is said to be immortal. On That all the worlds rest. None goes beyond That. This verily is That."
+    },
+    {
+     "ref": "Kena, part 1, verse 1",
+     "text": "By whom commanded and directed does the mind go towards its objects? Commanded by whom does the life-force, the first (cause), move? At whose will do men utter speech? What power directs the eye and the ear?",
+     "href": "OEBPS/c7.xhtml",
+     "fragment": "p2",
+     "highlight": "By whom commanded and directed does the mind go towards its objects? Commanded by whom does the life-force, the first (cause), move? At whose will do men utter speech? What power directs the eye and the ear?"
+    },
+    {
+     "ref": "Kena, part 2, verse 5",
+     "text": "If one knows It here, that is Truth; if one knows It not here, then great is his loss. The wise seeing the same Self in all beings, being liberated from this world, become immortal.",
+     "href": "OEBPS/c8.xhtml",
+     "fragment": "p10",
+     "highlight": "If one knows It here, that is Truth; if one knows It not here, then great is his loss. The wise seeing the same Self in all beings, being liberated from this world, become immortal."
+    }
+   ]
+  },
+  {
+   "id": "dhammapada",
+   "title": "Dhammapada",
+   "credit": "translated by F. Max Müller (1881), public domain",
+   "shelf": 2,
+   "url": "https://github.com/mateotomas2/numinos/releases/download/books-1/dhammapada.epub",
+   "sha256": "30c5616bcdc6461e74068ac4bb76594281df879f44e03a69705b760e7697054a",
+   "size": 40033,
+   "marks": [
+    {
+     "ref": "Verse 1",
+     "text": "All that we are is the result of what we have thought: it is founded on our thoughts, it is made up of our thoughts.",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p0",
+     "highlight": "All that we are is the result of what we have thought: it is founded on our thoughts, it is made up of our thoughts."
+    },
+    {
+     "ref": "Verse 5",
+     "text": "For hatred does not cease by hatred at any time: hatred ceases by love, this is an old rule.",
+     "href": "OEBPS/c0.xhtml",
+     "fragment": "p4",
+     "highlight": "For hatred does not cease by hatred at any time: hatred ceases by love, this is an old rule."
+    },
+    {
+     "ref": "Verse 21",
+     "text": "Earnestness is the path of immortality (Nirvana), thoughtlessness the path of death.",
+     "href": "OEBPS/c1.xhtml",
+     "fragment": "p0",
+     "highlight": "Earnestness is the path of immortality (Nirvana), thoughtlessness the path of death."
+    },
+    {
+     "ref": "Verse 33",
+     "text": "As a fletcher makes straight his arrow, a wise man makes straight his trembling and unsteady thought, which is difficult to guard, difficult to hold back.",
+     "href": "OEBPS/c2.xhtml",
+     "fragment": "p0",
+     "highlight": "As a fletcher makes straight his arrow, a wise man makes straight his trembling and unsteady thought, which is difficult to guard, difficult to hold back."
+    },
+    {
+     "ref": "Verse 50",
+     "text": "Not the perversities of others, not their sins of commission or omission, but his own misdeeds and negligences should a sage take notice of.",
+     "href": "OEBPS/c3.xhtml",
+     "fragment": "p6",
+     "highlight": "Not the perversities of others, not their sins of commission or omission, but his own misdeeds and negligences should a sage take notice of."
+    },
+    {
+     "ref": "Verse 81",
+     "text": "As a solid rock is not shaken by the wind, wise people falter not amidst blame and praise.",
+     "href": "OEBPS/c5.xhtml",
+     "fragment": "p5",
+     "highlight": "As a solid rock is not shaken by the wind, wise people falter not amidst blame and praise."
+    },
+    {
+     "ref": "Verse 103",
+     "text": "If one man conquer in battle a thousand times thousand men, and if another conquer himself, he is the greatest of conquerors.",
+     "href": "OEBPS/c7.xhtml",
+     "fragment": "p3",
+     "highlight": "If one man conquer in battle a thousand times thousand men, and if another conquer himself, he is the greatest of conquerors."
+    },
+    {
+     "ref": "Verse 160",
+     "text": "Self is the lord of self, who else could be the lord?",
+     "href": "OEBPS/c11.xhtml",
+     "fragment": "p3",
+     "highlight": "Self is the lord of self, who else could be the lord?"
+    },
+    {
+     "ref": "Verse 183",
+     "text": "Not to commit any sin, to do good, and to purify one's mind, that is the teaching of (all) the Awakened.",
+     "href": "OEBPS/c13.xhtml",
+     "fragment": "p4",
+     "highlight": "Not to commit any sin, to do good, and to purify one's mind, that is the teaching of (all) the Awakened."
+    },
+    {
+     "ref": "Verse 197",
+     "text": "Let us live happily then, not hating those who hate us!",
+     "href": "OEBPS/c14.xhtml",
+     "fragment": "p0",
+     "highlight": "Let us live happily then, not hating those who hate us!"
+    },
+    {
+     "ref": "Verse 223",
+     "text": "Let a man overcome anger by love, let him overcome evil by good; let him overcome the greedy by liberality, the liar by truth!",
+     "href": "OEBPS/c16.xhtml",
+     "fragment": "p2",
+     "highlight": "Let a man overcome anger by love, let him overcome evil by good; let him overcome the greedy by liberality, the liar by truth!"
+    },
+    {
+     "ref": "Verse 276",
+     "text": "You yourself must make an effort. The Tathagatas (Buddhas) are only preachers.",
+     "href": "OEBPS/c19.xhtml",
+     "fragment": "p3",
+     "highlight": "You yourself must make an effort. The Tathagatas (Buddhas) are only preachers."
+    },
+    {
+     "ref": "Verse 348",
+     "text": "Give up what is before, give up what is behind, give up what is in the middle, when thou goest to the other shore of existence; if thy mind is altogether free, thou wilt not again enter into birth and decay.",
+     "href": "OEBPS/c23.xhtml",
+     "fragment": "p14",
+     "highlight": "Give up what is before, give up what is behind, give up what is in the middle, when thou goest to the other shore of existence; if thy mind is altogether free, thou wilt not again enter into birth and decay."
+    }
+   ]
+  },
+  {
+   "id": "bible",
+   "title": "Bible",
+   "credit": "World English Bible, public domain",
+   "shelf": 3,
+   "url": "https://github.com/mateotomas2/numinos/releases/download/books-1/bible.epub",
+   "sha256": "867dd088fea9d30b86da79664d919c3357bf7643effa8014d6766c38e3595b2a",
+   "size": 2278870,
+   "marks": [
+    {
+     "ref": "Psalm 23:1",
+     "text": "The LORD is my shepherd; I shall lack nothing.",
+     "href": "OEBPS/c500.xhtml",
+     "fragment": "p0",
+     "highlight": "The LORD is my shepherd; I shall lack nothing."
+    },
+    {
+     "ref": "Psalm 34:18",
+     "text": "The LORD is near to those who have a broken heart, and saves those who have a crushed spirit.",
+     "href": "OEBPS/c511.xhtml",
+     "fragment": "p17",
+     "highlight": "The LORD is near to those who have a broken heart, and saves those who have a crushed spirit."
+    },
+    {
+     "ref": "Psalm 46:10",
+     "text": "Be still, and know that I am God. I will be exalted among the nations. I will be exalted on the earth.",
+     "href": "OEBPS/c523.xhtml",
+     "fragment": "p9",
+     "highlight": "Be still, and know that I am God. I will be exalted among the nations. I will be exalted on the earth."
+    },
+    {
+     "ref": "Proverbs 3:5",
+     "text": "Trust in the LORD with all your heart, and don’t lean on your own understanding.",
+     "href": "OEBPS/c630.xhtml",
+     "fragment": "p4",
+     "highlight": "Trust in the LORD with all your heart, and don’t lean on your own understanding."
+    },
+    {
+     "ref": "Proverbs 4:23",
+     "text": "Keep your heart with all diligence, for out of it is the wellspring of life.",
+     "href": "OEBPS/c631.xhtml",
+     "fragment": "p22",
+     "highlight": "Keep your heart with all diligence, for out of it is the wellspring of life."
+    },
+    {
+     "ref": "Ecclesiastes 3:1",
+     "text": "For everything there is a season, and a time for every purpose under heaven.",
+     "href": "OEBPS/c661.xhtml",
+     "fragment": "p0",
+     "highlight": "For everything there is a season, and a time for every purpose under heaven"
+    },
+    {
+     "ref": "Isaiah 40:31",
+     "text": "But those who wait for the LORD will renew their strength. They will mount up with wings like eagles. They will run, and not be weary. They will walk, and not faint.",
+     "href": "OEBPS/c718.xhtml",
+     "fragment": "p30",
+     "highlight": "but those who wait for the LORD will renew their strength. They will mount up with wings like eagles. They will run, and not be weary. They will walk, and not faint."
+    },
+    {
+     "ref": "Micah 6:8",
+     "text": "He has shown you, O man, what is good. What does the LORD require of you, but to act justly, to love mercy, and to walk humbly with your God?",
+     "href": "OEBPS/c898.xhtml",
+     "fragment": "p7",
+     "highlight": "He has shown you, O man, what is good. What does the LORD require of you, but to act justly, to love mercy, and to walk humbly with your God?"
+    },
+    {
+     "ref": "Matthew 5:8",
+     "text": "Blessed are the pure in heart, for they shall see God.",
+     "href": "OEBPS/c933.xhtml",
+     "fragment": "p7",
+     "highlight": "Blessed are the pure in heart, for they shall see God."
+    },
+    {
+     "ref": "Matthew 6:34",
+     "text": "Therefore don’t be anxious for tomorrow, for tomorrow will be anxious for itself. Each day’s own evil is sufficient.",
+     "href": "OEBPS/c934.xhtml",
+     "fragment": "p33",
+     "highlight": "Therefore don’t be anxious for tomorrow, for tomorrow will be anxious for itself. Each day’s own evil is sufficient."
+    },
+    {
+     "ref": "Matthew 7:7",
+     "text": "Ask, and it will be given you. Seek, and you will find. Knock, and it will be opened for you.",
+     "href": "OEBPS/c935.xhtml",
+     "fragment": "p6",
+     "highlight": "Ask, and it will be given you. Seek, and you will find. Knock, and it will be opened for you."
+    },
+    {
+     "ref": "Matthew 11:28",
+     "text": "Come to me, all you who labor and are heavily burdened, and I will give you rest.",
+     "href": "OEBPS/c939.xhtml",
+     "fragment": "p27",
+     "highlight": "Come to me, all you who labor and are heavily burdened, and I will give you rest."
+    },
+    {
+     "ref": "Luke 17:21",
+     "text": "God’s Kingdom is within you.",
+     "href": "OEBPS/c989.xhtml",
+     "fragment": "p20",
+     "highlight": "God’s Kingdom is within you."
+    },
+    {
+     "ref": "John 8:32",
+     "text": "You will know the truth, and the truth will make you free.",
+     "href": "OEBPS/c1004.xhtml",
+     "fragment": "p31",
+     "highlight": "You will know the truth, and the truth will make you free."
+    },
+    {
+     "ref": "John 14:27",
+     "text": "Peace I leave with you. My peace I give to you; not as the world gives, I give to you. Don’t let your heart be troubled, neither let it be fearful.",
+     "href": "OEBPS/c1010.xhtml",
+     "fragment": "p26",
+     "highlight": "Peace I leave with you. My peace I give to you; not as the world gives, I give to you. Don’t let your heart be troubled, neither let it be fearful."
+    },
+    {
+     "ref": "Romans 12:2",
+     "text": "Don’t be conformed to this world, but be transformed by the renewing of your mind, so that you may prove what is the good, well-pleasing, and perfect will of God.",
+     "href": "OEBPS/c1057.xhtml",
+     "fragment": "p1",
+     "highlight": "Don’t be conformed to this world, but be transformed by the renewing of your mind, so that you may prove what is the good, well-pleasing, and perfect will of God."
+    },
+    {
+     "ref": "1 Corinthians 13:13",
+     "text": "But now faith, hope, and love remain—these three. The greatest of these is love.",
+     "href": "OEBPS/c1074.xhtml",
+     "fragment": "p12",
+     "highlight": "But now faith, hope, and love remain—these three. The greatest of these is love."
+    },
+    {
+     "ref": "2 Corinthians 5:7",
+     "text": "For we walk by faith, not by sight.",
+     "href": "OEBPS/c1082.xhtml",
+     "fragment": "p6",
+     "highlight": "for we walk by faith, not by sight."
+    },
+    {
+     "ref": "Philippians 4:7",
+     "text": "And the peace of God, which surpasses all understanding, will guard your hearts and your thoughts in Christ Jesus.",
+     "href": "OEBPS/c1106.xhtml",
+     "fragment": "p6",
+     "highlight": "And the peace of God, which surpasses all understanding, will guard your hearts and your thoughts in Christ Jesus."
+    },
+    {
+     "ref": "James 1:22",
+     "text": "But be doers of the word, and not only hearers, deluding your own selves.",
+     "href": "OEBPS/c1146.xhtml",
+     "fragment": "p21",
+     "highlight": "But be doers of the word, and not only hearers, deluding your own selves."
+    },
+    {
+     "ref": "1 John 4:8",
+     "text": "He who doesn’t love doesn’t know God, for God is love.",
+     "href": "OEBPS/c1162.xhtml",
+     "fragment": "p7",
+     "highlight": "He who doesn’t love doesn’t know God, for God is love."
+    }
+   ]
+  }
+ ]
+}

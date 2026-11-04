@@ -37,6 +37,7 @@ class OverlayService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var panel: Panel? = null
     private var meditation: Meditation? = null
+    private var readerOpen = false
 
     /** Android announces the Home and Recents gestures this way; the window closes for them. */
     private val homeReceiver = object : BroadcastReceiver() {
@@ -73,12 +74,26 @@ class OverlayService : Service() {
             }
             ACTION_END -> meditation?.finish(completed = false)
             ACTION_REFRESH -> refreshBubble()
+            ACTION_READER_OPEN -> {
+                readerOpen = true
+                removeBubble()
+            }
+            ACTION_READER_CLOSED -> {
+                readerOpen = false
+                panel?.close()
+            }
+            ACTION_READER_BACK -> {
+                readerOpen = false
+                panel?.resumeFromReader()
+            }
         }
         if (!Settings.canDrawOverlays(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (meditation == null && panel == null && !AltarActivity.isOpen) showBubble()
+        // If you left a permission screen some other way, the waiting window shouldn't keep the symbol hidden.
+        if (intent?.action == null && !readerOpen) panel?.takeIf { it.isSuspended }?.close()
+        if (meditation == null && panel == null && !readerOpen && !AltarActivity.isOpen) showBubble()
         return START_STICKY
     }
 
@@ -238,7 +253,7 @@ class OverlayService : Service() {
 
     private fun onPanelClosed() {
         panel = null
-        if (meditation == null && !AltarActivity.isOpen) showBubble()
+        if (meditation == null && !readerOpen && !AltarActivity.isOpen) showBubble()
     }
 
     // Meditation
@@ -290,6 +305,9 @@ class OverlayService : Service() {
         private const val ACTION_HIDE = "hide"
         private const val ACTION_END = "end"
         private const val ACTION_REFRESH = "refresh"
+        private const val ACTION_READER_OPEN = "reader-open"
+        private const val ACTION_READER_CLOSED = "reader-closed"
+        private const val ACTION_READER_BACK = "reader-back"
         @Suppress("DEPRECATION")
         private const val ACTION_SYSTEM_CLOSE = Intent.ACTION_CLOSE_SYSTEM_DIALOGS
 
@@ -301,6 +319,19 @@ class OverlayService : Service() {
             if (Store.get(context).symbolVisible && Settings.canDrawOverlays(context)) {
                 context.startForegroundService(Intent(context, OverlayService::class.java).setAction(ACTION_REFRESH))
             }
+        }
+
+        /** The symbol steps aside while a book is open on its card. */
+        fun setReaderOpen(context: Context, open: Boolean) {
+            if (Store.get(context).symbolVisible && Settings.canDrawOverlays(context)) {
+                val action = if (open) ACTION_READER_OPEN else ACTION_READER_CLOSED
+                context.startForegroundService(Intent(context, OverlayService::class.java).setAction(action))
+            }
+        }
+
+        /** Back from the reader returns to the floating window as you left it. */
+        fun returnFromReader(context: Context) {
+            context.startForegroundService(Intent(context, OverlayService::class.java).setAction(ACTION_READER_BACK))
         }
 
         fun stop(context: Context) {
