@@ -7,6 +7,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
 import android.text.TextUtils
@@ -32,6 +33,7 @@ import android.widget.ScrollView
 import android.widget.Toast
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
@@ -51,7 +53,7 @@ private val SPINE_COLORS = mapOf(
     "bible" to 0xFF3A5FA8.toInt(),
 )
 
-/** The whole-screen window: the sentence, videos and meditation, with the library behind the sentence. */
+/** The floating window: the sentence, videos and meditation, with the library behind the sentence. */
 class Panel(
     serviceContext: Context,
     private val windows: WindowManager,
@@ -84,7 +86,12 @@ class Panel(
     val isSuspended get() = suspended
     private var foundBooks: List<FoundEpub>? = null
     private var searching = false
-    private val windowParams = wholeScreenParams()
+    private val windowParams = WindowManager.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT,
+    )
 
     private val root = object : FrameLayout(context) {
         override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -117,23 +124,22 @@ class Panel(
     }
     private val card = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundColor(PAPER)
-        isClickable = true
-        setOnApplyWindowInsetsListener { _, insets ->
-            val edges = screenEdges(insets)
-            setPadding(edges.left, edges.top, edges.right, edges.bottom)
-            insets
-        }
+        background = rounded(PAPER, context.dp(26).toFloat())
+        elevation = context.dp(14).toFloat()
+        clipToOutline = true
+        isClickable = true // Touches on the card must not reach the scrim and close it.
     }
 
     fun show() {
+        root.setBackgroundColor(0x66000000)
         root.alpha = 0f
-        root.addView(card, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.setOnClickListener { close() }
+        val width = min(context.resources.displayMetrics.widthPixels - context.dp(24), context.dp(380))
+        root.addView(card, FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         render()
         BookLoader.listener = { if (page == Page.SHELF || page == Page.BOOKSELLER) render() }
         root.onBackGesture { goBack() }
         windows.addView(root, windowParams)
-        root.hideSystemBars()
         card.visibility = View.INVISIBLE
         root.animate().alpha(1f).setDuration(260).start()
         card.post { reveal(opening = true) }
@@ -155,7 +161,6 @@ class Panel(
         root.animate().cancel()
         if (!root.isAttachedToWindow) {
             windows.addView(root, windowParams)
-            root.hideSystemBars()
             root.onBackGesture { goBack() }
         }
         // The window is redrawn so the tilted book stands straight and anything kept while reading shows up.
@@ -270,6 +275,10 @@ class Panel(
         breath?.cancel()
         sentenceHost = null
         card.removeAllViews()
+        val tall = page == Page.NOTEBOOK || page == Page.JAR || page == Page.BOOKSELLER
+        card.layoutParams = (card.layoutParams as FrameLayout.LayoutParams).apply {
+            height = if (tall) (context.resources.displayMetrics.heightPixels * 0.86f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+        }
         when (page) {
             Page.HOME -> renderHome()
             Page.SHELF -> renderShelf()
@@ -332,7 +341,7 @@ class Panel(
         val host = FrameLayout(context)
         sentenceHost = host
         fillSentence(host)
-        card.addView(host, LinearLayout.LayoutParams(-1, 0, 1f))
+        card.addView(host, LinearLayout.LayoutParams(-1, -2))
         card.addView(divider())
         card.addView(videoSection())
         card.addView(divider())
@@ -345,8 +354,7 @@ class Panel(
         val current = sentence
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(pad + context.dp(2), context.dp(52), pad, context.dp(6))
+            setPadding(pad + context.dp(2), pad + context.dp(4), pad, context.dp(6))
             addView(context.label(current?.text ?: "Add a sentence of your own, or turn on a book.", 21f, INK, serif = true).apply {
                 setLineSpacing(0f, 1.18f)
                 setPadding(0, 0, context.dp(26), 0)
@@ -365,14 +373,7 @@ class Panel(
                 true
             }
         }
-        host.addView(body, FrameLayout.LayoutParams(-1, -1))
-        host.addView(
-            context.iconButton(R.drawable.ic_close, "Close", SOFT) { close() },
-            FrameLayout.LayoutParams(context.dp(40), context.dp(40), Gravity.TOP or Gravity.START).apply {
-                topMargin = context.dp(6)
-                marginStart = context.dp(6)
-            },
-        )
+        host.addView(body, FrameLayout.LayoutParams(-1, -2))
         host.addView(
             context.iconButton(R.drawable.ic_settings, "Settings", SOFT) {
                 context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

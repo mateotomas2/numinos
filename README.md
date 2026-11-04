@@ -1,6 +1,6 @@
 # NuminOS
 
-NuminOS is an Android app, not an operating system. It puts a small symbol above your other apps. Tap it and the whole screen offers a sentence to live with, your practice videos and a meditation, then folds away again.
+NuminOS is an Android app, not an operating system. It puts a small symbol above your other apps. Tap it and a floating window offers a sentence to live with, your practice videos and a meditation, then folds away again.
 
 It has no account and no server. Everything you add stays on your phone. The internet is used only for YouTube titles, thumbnails and videos, and to download the starter books from this repository's releases.
 
@@ -9,7 +9,7 @@ Requires Android 8.0 or newer.
 ## What it does
 
 - **Sentence:** shows a random line from marked passages in the books on your shelf, your liked passages and your own sentences, or one you fix in place. Tap it to open the library, tap its title to open the book at that passage, and long-press it for more actions.
-- **Library:** a bookshelf with the books you've added, a notebook for your sentences and a jar for passages you like. Books open on the whole screen with images, tables and adjustable text, and they remember your place.
+- **Library:** a bookshelf with the books you've added, a notebook for your sentences and a jar for passages you like. Books open on a floating card with images, tables and adjustable text, and they remember your place.
 - **Videos:** keeps your YouTube practice videos, in categories you create and the order you choose. It reopens on the category and place you left. One tap opens the video in SmartTube if it's installed, otherwise in YouTube.
 - **Meditation:** tap Meditate to start with your last duration. Tap the duration to choose another on a wheel, or hold it, drag and let go to set it and start in one move. Choose ∞ to sit with no timer, which ends when you end it or after 2 hours. There's an opening and closing bell. During a sit the screen stays on and dimmed in front of your altar, and a tap shows the time left. You can let the screen sleep in Settings.
 - **Altar:** arrange your own with the Altar button. Drag a candle, incense, a singing bowl, a gong, a lotus, a leaf, stones, your symbol, text, the timer or a PNG up from the tray. Drag to move, use two fingers to rotate or resize, and drag to the trash to remove. Touching the bowl or gong rings it, even during a sit.
@@ -18,7 +18,7 @@ Requires Android 8.0 or newer.
 
 ## Add your own
 
-- **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap + in the main window and paste a link.
+- **A video:** in the YouTube app, tap Share and choose NuminOS. You can also tap + in the floating window and paste a link.
 - **An image:** tap Image in the altar tray, or share a PNG from any app to NuminOS.
 - **A sentence:** tap the sentence, open the notebook and tap +. You can also share selected text from any app to NuminOS.
 - **A book:** on the shelf, tap +. You can add a starter book, an EPUB found on your phone or any file you choose. Your EPUBs open where they are, with nothing copied or converted.

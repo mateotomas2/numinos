@@ -39,6 +39,7 @@ import org.readium.r2.shared.util.toAbsoluteUrl
 import org.readium.r2.shared.util.toUrl
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -81,21 +82,15 @@ class ReaderActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onResume() {
-        super.onResume()
-        window.decorView.hideSystemBars()
-    }
-
     private fun cardAround(content: View): View {
-        window.useWholeScreen()
+        val metrics = resources.displayMetrics
+        val width = min(metrics.widthPixels - dp(24), dp(560))
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(PAPER)
-            setOnApplyWindowInsetsListener { _, insets ->
-                val edges = screenEdges(insets)
-                setPadding(edges.left, edges.top, edges.right, edges.bottom)
-                insets
-            }
+            background = rounded(PAPER, dp(26).toFloat())
+            elevation = dp(14).toFloat()
+            clipToOutline = true
+            isClickable = true // Touches on the card must not reach the scrim and close it.
             addView(label(book.title, 13f, SOFT, serif = true).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
@@ -104,7 +99,10 @@ class ReaderActivity : AppCompatActivity() {
             addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(controls(), LinearLayout.LayoutParams(-1, -2))
         }
-        return card
+        return FrameLayout(this).apply {
+            setOnClickListener { finish() }
+            addView(card, FrameLayout.LayoutParams(width, (metrics.heightPixels * 0.86f).toInt(), Gravity.CENTER))
+        }
     }
 
     /** All the reader's buttons sit at the bottom, within reach of one hand. */
