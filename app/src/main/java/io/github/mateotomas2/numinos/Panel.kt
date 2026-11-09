@@ -836,7 +836,7 @@ class Panel(
         addView(PillarsView(context, today), LinearLayout.LayoutParams(context.dp(24), context.dp(24)).apply { marginEnd = context.dp(10) })
         Pillar.entries.forEachIndexed { index, pillar ->
             if (index > 0) addView(context.label("·", 13f, SOFT).apply { setPadding(context.dp(6), 0, context.dp(6), 0) })
-            addView(context.label(pillar.label, 13f, if (today.done(pillar)) ACCENT else SOFT, bold = today.done(pillar)))
+            addView(context.label(pillar.label, 13f, if (today.progress(pillar) > 0f) pillar.color else SOFT, bold = today.done(pillar)))
         }
         contentDescription = "Today: " + Pillar.entries.joinToString { "${it.label} ${if (today.done(it)) "done" else "not yet"}" }
         tappable { navigate(Page.PRACTICE) }
@@ -890,7 +890,7 @@ class Panel(
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
                     val reached = days.values.count { it.done(pillar) }
-                    addView(context.label("$reached", 20f, INK, serif = true))
+                    addView(context.label("$reached", 20f, pillar.color, serif = true))
                     addView(context.label("${pillar.label} ${if (reached == 1) "day" else "days"}", 12f, SOFT))
                 }, LinearLayout.LayoutParams(0, -2, 1f))
             }

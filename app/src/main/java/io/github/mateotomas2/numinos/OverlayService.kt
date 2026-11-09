@@ -162,7 +162,6 @@ class OverlayService : Service() {
         view.markX = if (store.bubbleOnLeft) offset else bubbleSize() - size - offset
         view.practice = store.practice(practiceDay(System.currentTimeMillis()))
         view.practiceOnLeft = !store.bubbleOnLeft
-        view.practiceColor = Symbol.of(store.symbolId).palette.accent.toInt()
         view.invalidate()
     }
 

@@ -11,7 +11,14 @@ import java.time.ZoneId
 import kotlin.math.min
 
 /** Mind is reading, Body is practice videos and Soul is meditating, each with minutes to reach a day. */
-enum class Pillar(val label: String) { MIND("Mind"), BODY("Body"), SOUL("Soul") }
+enum class Pillar(val label: String, private val light: Long, private val dark: Long) {
+    MIND("Mind", 0xFF4F6FA3, 0xFF8AA6D6),
+    BODY("Body", 0xFFB5603A, 0xFFE0906A),
+    SOUL("Soul", 0xFFB08A2E, 0xFFE2BF5E);
+
+    /** The same three colors in every theme, so each pillar is easy to recognise. */
+    val color: Int get() = (if (Look.dark) dark else light).toInt()
+}
 
 /** A day's minutes for each pillar, out of the minutes that complete it. */
 class DayPractice(private val minutes: Map<Pillar, Int>, private val goals: Map<Pillar, Int>) {
@@ -42,7 +49,7 @@ private const val DAY_STARTS_AT_HOUR = 4L
  */
 fun drawPillars(
     canvas: Canvas, paint: Paint, box: RectF, day: DayPractice,
-    sweep: Float, stroke: Float, doneColor: Int, todoColor: Int,
+    sweep: Float, stroke: Float, todoColor: Int,
 ) {
     val gap = if (sweep > 0) GAP_DEGREES else -GAP_DEGREES
     val part = sweep / Pillar.entries.size
@@ -56,7 +63,7 @@ fun drawPillars(
         canvas.drawArc(box, start, part - gap, false, paint)
         val progress = day.progress(pillar)
         if (progress > 0f) {
-            paint.color = doneColor
+            paint.color = pillar.color
             canvas.drawArc(box, start, (part - gap) * progress, false, paint)
         }
     }
@@ -79,7 +86,7 @@ class PillarsView(context: Context, var day: DayPractice) : View(context) {
         val stroke = size * 0.13f
         val inset = stroke / 2 + size * 0.04f
         box.set((width - size) / 2 + inset, (height - size) / 2 + inset, (width + size) / 2 - inset, (height + size) / 2 - inset)
-        drawPillars(canvas, paint, box, day, 360f, stroke, ACCENT, LINE)
+        drawPillars(canvas, paint, box, day, 360f, stroke, LINE)
         if (day.complete) {
             paint.style = Paint.Style.FILL
             paint.color = ACCENT

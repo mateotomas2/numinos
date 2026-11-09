@@ -251,7 +251,6 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
     /** The day's pillars, drawn as a half ring just outside the mark, on the side facing into the screen. */
     var practice: DayPractice? = null
     var practiceOnLeft = false
-    var practiceColor = symbol.palette.accent.toInt()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val box = RectF()
@@ -276,7 +275,7 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
         val cx = markX + markSize / 2f
         val cy = height / 2f
         box.set(cx - radius, cy - radius, cx + radius, cy + radius)
-        drawPillars(canvas, paint, box, day, if (practiceOnLeft) -180f else 180f, stroke, practiceColor, 0x66808080)
+        drawPillars(canvas, paint, box, day, if (practiceOnLeft) -180f else 180f, stroke, 0x66808080)
     }
 
     private fun drawMark(canvas: Canvas) {
