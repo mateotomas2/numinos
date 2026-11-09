@@ -126,6 +126,7 @@ class Meditation(
 
     fun finish(completed: Boolean) {
         if (finished) return
+        recordSit()
         finished = true
         handler.removeCallbacksAndMessages(null)
         if (!completed && !untimed) {
@@ -155,6 +156,7 @@ class Meditation(
     }
 
     fun release() {
+        if (!finished) recordSit()
         finished = true
         handler.removeCallbacksAndMessages(null)
         breath?.cancel()
@@ -166,6 +168,12 @@ class Meditation(
     private fun elapsedClock() = clock((SystemClock.elapsedRealtime() - startedAtElapsed) / 1000)
 
     private fun clock(seconds: Long) = String.format(Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60)
+
+    /** Whatever was sat counts, even a sit ended early. */
+    private fun recordSit() {
+        val sat = (minOf(SystemClock.elapsedRealtime(), endsAtElapsed) - startedAtElapsed) / 1000
+        if (sat > 0) store.recordPractice(Pillar.SOUL, System.currentTimeMillis() - sat * 1000, sat)
+    }
 
     private fun showTime(time: String) {
         countdown.text = time

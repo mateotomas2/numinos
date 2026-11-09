@@ -6,8 +6,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.ActionMode
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -56,6 +58,9 @@ class ReaderActivity : AppCompatActivity() {
     private var marks: List<Locator> = emptyList()
     private var nextMark = -1
     private var returning = false
+    private var readingSince = 0L
+    private var lastTouch = 0L
+    private var readSeconds = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The book is opened again from scratch, so Android must not try to restore the reader itself.
@@ -256,6 +261,37 @@ class ReaderActivity : AppCompatActivity() {
         OverlayService.setReaderOpen(this, true)
     }
 
+    override fun onResume() {
+        super.onResume()
+        readingSince = System.currentTimeMillis()
+        lastTouch = readingSince
+        readSeconds = 0
+    }
+
+    /** Time counts up to [IDLE_MS] after each touch or key, so a book left open doesn't count. */
+    private fun noteReading() {
+        val now = System.currentTimeMillis()
+        readSeconds += minOf(now - lastTouch, IDLE_MS) / 1000
+        lastTouch = now
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        noteReading()
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        noteReading()
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onPause() {
+        noteReading()
+        if (readSeconds > 0) store.recordPractice(Pillar.MIND, readingSince, readSeconds)
+        readSeconds = 0
+        super.onPause()
+    }
+
     override fun onStop() {
         navigator?.let { store.setPlace(book.id, it.currentLocator.value.toJSON().toString()) }
         super.onStop()
@@ -272,6 +308,7 @@ class ReaderActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_BOOK = "book"
+        private const val IDLE_MS = 3 * 60 * 1000L
         private const val EXTRA_LOCATOR = "locator"
         private const val MENU_LIKE = 1001
         private const val MENU_FIX = 1002

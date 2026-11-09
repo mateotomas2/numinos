@@ -6,6 +6,7 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDate
 import java.util.UUID
 
 const val SOURCE_MINE = "mine"
@@ -192,6 +193,23 @@ class Store private constructor(context: Context) {
         return Sentence("$SOURCE_MINE:$id", text.trim(), MINE_TITLE, "")
     }
 
+    /** Changes one of your sentences, and the copies kept as the fixed sentence or in the jar. */
+    @Synchronized
+    fun editMine(key: String, text: String): Sentence {
+        val items = JSONArray(prefs.getString("mine", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if ("$SOURCE_MINE:${item.getString("id")}" == key) item.put("text", text.trim())
+        }
+        prefs.edit().putString("mine", items.toString()).apply()
+        val edited = Sentence(key, text.trim(), MINE_TITLE, "")
+        if (pinned()?.key == key) setPinned(edited)
+        val jar = JSONArray()
+        liked().forEach { jar.put((if (it.key == key) edited else it).toJson()) }
+        prefs.edit().putString("jar", jar.toString()).apply()
+        return edited
+    }
+
     @Synchronized
     fun removeMine(key: String) {
         val kept = JSONArray()
@@ -350,6 +368,77 @@ class Store private constructor(context: Context) {
     var sitScreenSleeps: Boolean
         get() = prefs.getBoolean("sitScreenSleeps", false)
         set(value) = prefs.edit().putBoolean("sitScreenSleeps", value).apply()
+
+    // Practice: each entry is a pillar, when it started and how many seconds it lasted.
+
+    @Synchronized
+    fun recordPractice(pillar: Pillar, startedAt: Long, seconds: Long) {
+        val day = practiceDay(startedAt)
+        val before = practice(day)
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        items.put(JSONObject().put("p", pillar.name).put("t", startedAt).put("s", seconds))
+        prefs.edit().putString("practice", items.toString()).apply()
+        if (bellOnComplete && !before.complete && practice(day).complete) app.playRing(R.raw.bell)
+    }
+
+    /** Fills in the length of a session recorded when it began, such as a video. */
+    @Synchronized
+    fun setPracticeSeconds(pillar: Pillar, startedAt: Long, seconds: Long) {
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if (item.getString("p") == pillar.name && item.getLong("t") == startedAt) item.put("s", seconds)
+        }
+        prefs.edit().putString("practice", items.toString()).apply()
+    }
+
+    fun practice(day: LocalDate): DayPractice = practiceDays(day, day)[day] ?: DayPractice.NONE
+
+    /** What each day from [first] to [last] reached. Days with nothing at all are left out. */
+    fun practiceDays(first: LocalDate, last: LocalDate): Map<LocalDate, DayPractice> {
+        val mind = mutableMapOf<LocalDate, Long>()
+        val soul = mutableMapOf<LocalDate, Long>()
+        val body = mutableSetOf<LocalDate>()
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val day = practiceDay(item.getLong("t"))
+            if (day < first || day > last) continue
+            val seconds = item.getLong("s")
+            when (item.getString("p")) {
+                Pillar.MIND.name -> mind[day] = (mind[day] ?: 0) + seconds
+                Pillar.SOUL.name -> soul[day] = (soul[day] ?: 0) + seconds
+                Pillar.BODY.name -> body += day
+            }
+        }
+        return (mind.keys + soul.keys + body).associateWith { day ->
+            DayPractice(
+                mind = (mind[day] ?: 0) >= mindMinutes * 60L,
+                body = day in body,
+                soul = (soul[day] ?: 0) >= soulMinutes * 60L,
+            )
+        }
+    }
+
+    fun clearPractice() = prefs.edit().remove("practice").apply()
+
+    /** Minutes of reading a day that count as Mind. */
+    var mindMinutes: Int
+        get() = prefs.getInt("mindMinutes", 5)
+        set(value) = prefs.edit().putInt("mindMinutes", value).apply()
+
+    /** Minutes of meditation a day that count as Soul. */
+    var soulMinutes: Int
+        get() = prefs.getInt("soulMinutes", 5)
+        set(value) = prefs.edit().putInt("soulMinutes", value).apply()
+
+    var showPillars: Boolean
+        get() = prefs.getBoolean("showPillars", true)
+        set(value) = prefs.edit().putBoolean("showPillars", value).apply()
+
+    var bellOnComplete: Boolean
+        get() = prefs.getBoolean("bellOnComplete", false)
+        set(value) = prefs.edit().putBoolean("bellOnComplete", value).apply()
 
     var minutes: Int
         get() = prefs.getInt("minutes", 10)
