@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.min
 
-/** Mind is reading, Body is a practice video and Soul is meditating. */
+/** Mind is reading, Body is practice videos and Soul is meditating, each with minutes to reach a day. */
 enum class Pillar(val label: String) { MIND("Mind"), BODY("Body"), SOUL("Soul") }
 
 class DayPractice(val mind: Boolean, val body: Boolean, val soul: Boolean) {

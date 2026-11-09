@@ -30,7 +30,6 @@ class VideoActivity : Activity() {
             return
         }
         Store.get(this).recordPractice(Pillar.BODY, startedAt, 0)
-        OverlayService.refresh(this)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -48,7 +47,10 @@ class VideoActivity : Activity() {
         super.onResume()
         if (!left) return
         val seconds = (System.currentTimeMillis() - startedAt) / 1000
-        if (seconds in 1..MAX_SECONDS) Store.get(this).setPracticeSeconds(Pillar.BODY, startedAt, seconds)
+        if (seconds in 1..MAX_SECONDS) {
+            Store.get(this).setPracticeSeconds(Pillar.BODY, startedAt, seconds)
+            OverlayService.refresh(this)
+        }
         finish()
     }
 

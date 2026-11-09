@@ -362,7 +362,7 @@ class Panel(
         card.addView(videoSection())
         card.addView(divider())
         card.addView(meditationSection())
-        if (store.showPillars) card.addView(pillarsLine())
+        card.addView(pillarsLine())
     }
 
     /** Tap to browse the shelf, tap the title for the book, long-press for the floating actions. */
@@ -886,9 +886,6 @@ class Panel(
             }
         }
         body.addView(counts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(14) })
-        body.addView(context.label("Days this month that reached each one: reading for Mind, a practice video for Body, meditation for Soul.", 12f, SOFT).apply {
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(10) })
         card.addView(body)
     }
 

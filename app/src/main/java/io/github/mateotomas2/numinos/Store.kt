@@ -10,6 +10,7 @@ import java.time.LocalDate
 import java.util.UUID
 
 const val SOURCE_MINE = "mine"
+private const val DEFAULT_DAILY_MINUTES = 10
 const val SOURCE_JAR = "jar"
 const val MINE_TITLE = "My sentences"
 const val DARK_MODE_SYSTEM = "system"
@@ -373,12 +374,9 @@ class Store private constructor(context: Context) {
 
     @Synchronized
     fun recordPractice(pillar: Pillar, startedAt: Long, seconds: Long) {
-        val day = practiceDay(startedAt)
-        val before = practice(day)
         val items = JSONArray(prefs.getString("practice", "[]"))
         items.put(JSONObject().put("p", pillar.name).put("t", startedAt).put("s", seconds))
         prefs.edit().putString("practice", items.toString()).apply()
-        if (bellOnComplete && !before.complete && practice(day).complete) app.playRing(R.raw.bell)
     }
 
     /** Fills in the length of a session recorded when it began, such as a video. */
@@ -396,49 +394,27 @@ class Store private constructor(context: Context) {
 
     /** What each day from [first] to [last] reached. Days with nothing at all are left out. */
     fun practiceDays(first: LocalDate, last: LocalDate): Map<LocalDate, DayPractice> {
-        val mind = mutableMapOf<LocalDate, Long>()
-        val soul = mutableMapOf<LocalDate, Long>()
-        val body = mutableSetOf<LocalDate>()
+        val seconds = mutableMapOf<Pair<LocalDate, String>, Long>()
         val items = JSONArray(prefs.getString("practice", "[]"))
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
             val day = practiceDay(item.getLong("t"))
             if (day < first || day > last) continue
-            val seconds = item.getLong("s")
-            when (item.getString("p")) {
-                Pillar.MIND.name -> mind[day] = (mind[day] ?: 0) + seconds
-                Pillar.SOUL.name -> soul[day] = (soul[day] ?: 0) + seconds
-                Pillar.BODY.name -> body += day
-            }
+            val key = day to item.getString("p")
+            seconds[key] = (seconds[key] ?: 0) + item.getLong("s")
         }
-        return (mind.keys + soul.keys + body).associateWith { day ->
-            DayPractice(
-                mind = (mind[day] ?: 0) >= mindMinutes * 60L,
-                body = day in body,
-                soul = (soul[day] ?: 0) >= soulMinutes * 60L,
-            )
+        fun reached(day: LocalDate, pillar: Pillar) = (seconds[day to pillar.name] ?: 0) >= dailyMinutes(pillar) * 60L
+        return seconds.keys.map { it.first }.toSet().associateWith { day ->
+            DayPractice(reached(day, Pillar.MIND), reached(day, Pillar.BODY), reached(day, Pillar.SOUL))
         }
     }
 
     fun clearPractice() = prefs.edit().remove("practice").apply()
 
-    /** Minutes of reading a day that count as Mind. */
-    var mindMinutes: Int
-        get() = prefs.getInt("mindMinutes", 5)
-        set(value) = prefs.edit().putInt("mindMinutes", value).apply()
+    /** The minutes a day that complete a pillar. */
+    fun dailyMinutes(pillar: Pillar) = prefs.getInt("minutes${pillar.name}", DEFAULT_DAILY_MINUTES)
 
-    /** Minutes of meditation a day that count as Soul. */
-    var soulMinutes: Int
-        get() = prefs.getInt("soulMinutes", 5)
-        set(value) = prefs.edit().putInt("soulMinutes", value).apply()
-
-    var showPillars: Boolean
-        get() = prefs.getBoolean("showPillars", true)
-        set(value) = prefs.edit().putBoolean("showPillars", value).apply()
-
-    var bellOnComplete: Boolean
-        get() = prefs.getBoolean("bellOnComplete", false)
-        set(value) = prefs.edit().putBoolean("bellOnComplete", value).apply()
+    fun setDailyMinutes(pillar: Pillar, minutes: Int) = prefs.edit().putInt("minutes${pillar.name}", minutes).apply()
 
     var minutes: Int
         get() = prefs.getInt("minutes", 10)

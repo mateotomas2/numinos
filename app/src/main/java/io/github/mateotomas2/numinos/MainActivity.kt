@@ -272,17 +272,13 @@ class MainActivity : Activity() {
         toggle("Let the screen sleep", store.sitScreenSleeps) { store.sitScreenSleeps = it }
 
         heading("Your practice")
-        content.addView(body("Mind is reading, Body is opening a practice video and Soul is meditating. A day starts at 4:00."))
-        slider("Reading that counts as Mind", store.mindMinutes, 1, 30, { "$it min" }) {
-            store.mindMinutes = it
-            OverlayService.refresh(this)
+        content.addView(body("Minutes a day for each. A day starts at 4:00."))
+        listOf(Pillar.MIND to "Mind · reading", Pillar.BODY to "Body · videos", Pillar.SOUL to "Soul · meditation").forEach { (pillar, title) ->
+            slider(title, store.dailyMinutes(pillar), 1, 60, { "$it min" }) {
+                store.setDailyMinutes(pillar, it)
+                OverlayService.refresh(this)
+            }
         }
-        slider("Meditation that counts as Soul", store.soulMinutes, 1, 30, { "$it min" }) {
-            store.soulMinutes = it
-            OverlayService.refresh(this)
-        }
-        toggle("Show Mind · Body · Soul in the window", store.showPillars) { store.showPillars = it }
-        toggle("Ring a bell when the day is complete", store.bellOnComplete) { store.bellOnComplete = it }
         content.addView(label("Delete practice history", 14f, ACCENT, bold = true).apply {
             minHeight = dp(44)
             gravity = Gravity.CENTER_VERTICAL
