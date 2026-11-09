@@ -394,7 +394,8 @@ class Store private constructor(context: Context) {
         prefs.edit().putString("practice", items.toString()).apply()
     }
 
-    fun practice(day: LocalDate): DayPractice = practiceDays(day, day)[day] ?: DayPractice.NONE
+    fun practice(day: LocalDate): DayPractice =
+        practiceDays(day, day)[day] ?: DayPractice(emptyMap(), Pillar.entries.associateWith(::dailyMinutes))
 
     /** What each day from [first] to [last] reached. Days with nothing at all are left out. */
     fun practiceDays(first: LocalDate, last: LocalDate): Map<LocalDate, DayPractice> {
@@ -407,9 +408,9 @@ class Store private constructor(context: Context) {
             val key = day to item.getString("p")
             seconds[key] = (seconds[key] ?: 0) + item.getLong("s")
         }
-        fun reached(day: LocalDate, pillar: Pillar) = (seconds[day to pillar.name] ?: 0) >= dailyMinutes(pillar) * 60L
+        val goals = Pillar.entries.associateWith(::dailyMinutes)
         return seconds.keys.map { it.first }.toSet().associateWith { day ->
-            DayPractice(reached(day, Pillar.MIND), reached(day, Pillar.BODY), reached(day, Pillar.SOUL))
+            DayPractice(Pillar.entries.associateWith { ((seconds[day to it.name] ?: 0) / 60).toInt() }, goals)
         }
     }
 

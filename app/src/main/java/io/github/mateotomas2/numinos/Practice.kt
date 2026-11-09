@@ -13,17 +13,20 @@ import kotlin.math.min
 /** Mind is reading, Body is practice videos and Soul is meditating, each with minutes to reach a day. */
 enum class Pillar(val label: String) { MIND("Mind"), BODY("Body"), SOUL("Soul") }
 
-class DayPractice(val mind: Boolean, val body: Boolean, val soul: Boolean) {
-    val complete get() = mind && body && soul
+/** A day's minutes for each pillar, out of the minutes that complete it. */
+class DayPractice(private val minutes: Map<Pillar, Int>, private val goals: Map<Pillar, Int>) {
+    fun minutes(pillar: Pillar) = minutes[pillar] ?: 0
 
-    fun done(pillar: Pillar) = when (pillar) {
-        Pillar.MIND -> mind
-        Pillar.BODY -> body
-        Pillar.SOUL -> soul
-    }
+    fun goal(pillar: Pillar) = goals[pillar] ?: 1
+
+    fun progress(pillar: Pillar) = (minutes(pillar).toFloat() / goal(pillar)).coerceIn(0f, 1f)
+
+    fun done(pillar: Pillar) = minutes(pillar) >= goal(pillar)
+
+    val complete get() = Pillar.entries.all(::done)
 
     companion object {
-        val NONE = DayPractice(mind = false, body = false, soul = false)
+        val NONE = DayPractice(emptyMap(), emptyMap())
     }
 }
 
@@ -34,7 +37,7 @@ fun practiceDay(at: Long): LocalDate =
 private const val DAY_STARTS_AT_HOUR = 4L
 
 /**
- * Draws the three pillars as arcs, Mind first from the top. A full ring sweeps 360 degrees and the
+ * Draws the three pillars as arcs that fill with the day's minutes, Mind first from the top. A full ring sweeps 360 degrees and the
  * floating symbol's half ring sweeps 180 or -180, so it always faces into the screen.
  */
 fun drawPillars(
@@ -48,8 +51,14 @@ fun drawPillars(
     paint.strokeCap = Paint.Cap.ROUND
     paint.shader = null
     Pillar.entries.forEachIndexed { index, pillar ->
-        paint.color = if (day.done(pillar)) doneColor else todoColor
-        canvas.drawArc(box, START_DEGREES + part * index + gap / 2, part - gap, false, paint)
+        val start = START_DEGREES + part * index + gap / 2
+        paint.color = todoColor
+        canvas.drawArc(box, start, part - gap, false, paint)
+        val progress = day.progress(pillar)
+        if (progress > 0f) {
+            paint.color = doneColor
+            canvas.drawArc(box, start, (part - gap) * progress, false, paint)
+        }
     }
 }
 

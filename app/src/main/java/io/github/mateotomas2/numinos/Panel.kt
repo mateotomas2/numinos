@@ -853,7 +853,11 @@ class Panel(
             orientation = LinearLayout.VERTICAL
             setPadding(pad, context.dp(4), pad, context.dp(20))
         }
-        body.addView(context.label(if (complete == 1) "1 complete day" else "$complete complete days", 15f, INK, serif = true))
+        val now = days[today] ?: store.practice(today)
+        body.addView(context.label("Today  " + Pillar.entries.joinToString(" · ") { "${it.label} ${now.minutes(it)}/${now.goal(it)}" } + " min", 13.5f, INK))
+        body.addView(context.label(if (complete == 1) "1 complete day this month" else "$complete complete days this month", 15f, INK, serif = true).apply {
+            setPadding(0, context.dp(10), 0, 0)
+        })
         val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
         val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }.also { grid.addView(it, LinearLayout.LayoutParams(-1, -2)) }
@@ -885,8 +889,9 @@ class Panel(
                 addView(LinearLayout(context).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
-                    addView(context.label("${days.values.count { it.done(pillar) }}", 20f, INK, serif = true))
-                    addView(context.label(pillar.label, 12f, SOFT))
+                    val reached = days.values.count { it.done(pillar) }
+                    addView(context.label("$reached", 20f, INK, serif = true))
+                    addView(context.label("${pillar.label} ${if (reached == 1) "day" else "days"}", 12f, SOFT))
                 }, LinearLayout.LayoutParams(0, -2, 1f))
             }
         }
