@@ -34,18 +34,19 @@ object YouTube {
 
     fun videoId(text: String): String? = idPattern.find(text)?.groupValues?.get(1)
 
-    fun open(context: Context, id: String) {
+    fun open(context: Context, id: String): Boolean {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$id"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         for (app in PLAYERS) {
             try {
                 context.startActivity(Intent(intent).setPackage(app))
-                return
+                return true
             } catch (_: ActivityNotFoundException) {
                 // Not installed: try the next one.
             }
         }
         Toast.makeText(context, "No app can open this video", Toast.LENGTH_SHORT).show()
+        return false
     }
 
     private fun get(url: String): ByteArray {

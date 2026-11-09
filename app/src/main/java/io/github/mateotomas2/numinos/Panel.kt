@@ -32,6 +32,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import java.time.YearMonth
+import java.time.format.TextStyle
+import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
@@ -40,7 +43,7 @@ import kotlin.math.roundToInt
 private const val BACK_REPEAT_MS = 200L
 private const val BACK_ANNOUNCE_MS = 700L
 
-private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR }
+private enum class Page { HOME, SHELF, BOOKSELLER, NOTEBOOK, JAR, PRACTICE }
 
 private const val HOLD_START = "Let go to start, slide sideways to cancel"
 
@@ -297,6 +300,7 @@ class Panel(
             Page.BOOKSELLER -> renderBookseller()
             Page.NOTEBOOK -> renderNotebook()
             Page.JAR -> renderJar()
+            Page.PRACTICE -> renderPractice()
         }
     }
 
@@ -358,6 +362,7 @@ class Panel(
         card.addView(videoSection())
         card.addView(divider())
         card.addView(meditationSection())
+        card.addView(pillarsLine())
     }
 
     /** Tap to browse the shelf, tap the title for the book, long-press for the floating actions. */
@@ -512,6 +517,7 @@ class Panel(
                 Toast.makeText(context, "It won't come up at random. Settings can bring it back.", Toast.LENGTH_SHORT).show()
             }
         } else {
+            add(R.drawable.ic_edit, "Edit") { editMine(item) }
             add(R.drawable.ic_delete, "Delete") {
                 context.dialogBuilder()
                     .setMessage("Delete this sentence?")
@@ -525,6 +531,26 @@ class Panel(
                     .showInPanel()
             }
         }
+    }
+
+    private fun editMine(item: Sentence) {
+        val (box, field) = context.dialogField("A sentence to live with")
+        field.setText(item.text)
+        field.setSelection(item.text.length)
+        context.dialogBuilder()
+            .setTitle("Edit sentence")
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val text = field.text.toString().trim()
+                if (text.isNotEmpty()) {
+                    val edited = store.editMine(item.key, text)
+                    if (sentence?.key == item.key) sentence = edited
+                    render()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .create()
+            .showInPanel()
     }
 
     private fun dismissPill() {
@@ -609,7 +635,12 @@ class Panel(
             tag = video.id
             if (arranging == null) {
                 tappable {
-                    YouTube.open(context, video.id)
+                    if (YouTube.open(context, video.id)) {
+                        val now = System.currentTimeMillis()
+                        store.recordPractice(Pillar.BODY, now, 0)
+                        store.videoOpenedAt = now
+                        store.videoFullScreen = false
+                    }
                     close()
                 }
                 setOnLongClickListener {
@@ -792,6 +823,80 @@ class Panel(
             close()
         })
         addView(durationChip(), LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
+    }
+
+    // Practice
+
+    /** Today's Mind, Body and Soul under Meditate. Tap it for the month. */
+    private fun pillarsLine() = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        val today = store.practice(practiceDay(System.currentTimeMillis()))
+        setPadding(pad + context.dp(4), 0, pad, context.dp(12))
+        addView(PillarsView(context, today), LinearLayout.LayoutParams(context.dp(24), context.dp(24)).apply { marginEnd = context.dp(10) })
+        Pillar.entries.forEachIndexed { index, pillar ->
+            if (index > 0) addView(context.label("·", 13f, SOFT).apply { setPadding(context.dp(6), 0, context.dp(6), 0) })
+            addView(context.label(pillar.label, 13f, if (today.progress(pillar) > 0f) pillar.color else SOFT, bold = today.done(pillar)))
+        }
+        contentDescription = "Today: " + Pillar.entries.joinToString { "${it.label} ${if (today.done(it)) "done" else "not yet"}" }
+        tappable { navigate(Page.PRACTICE) }
+    }
+
+    /** This month, one ring a day, and how many days reached each pillar. */
+    private fun renderPractice() {
+        val today = practiceDay(System.currentTimeMillis())
+        val month = YearMonth.from(today)
+        val days = store.practiceDays(month.atDay(1), month.atEndOfMonth())
+        val complete = days.values.count { it.complete }
+        card.addView(header(month.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH) + " " + month.year, "Practice"))
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, context.dp(4), pad, context.dp(20))
+        }
+        val now = days[today] ?: store.practice(today)
+        body.addView(context.label("Today  " + Pillar.entries.joinToString(" · ") { "${it.label} ${now.minutes(it)}/${now.goal(it)}" } + " min", 13.5f, INK))
+        body.addView(context.label(if (complete == 1) "1 complete day this month" else "$complete complete days this month", 15f, INK, serif = true).apply {
+            setPadding(0, context.dp(10), 0, 0)
+        })
+        val firstDay = WeekFields.of(Locale.getDefault()).firstDayOfWeek
+        val grid = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        fun row() = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }.also { grid.addView(it, LinearLayout.LayoutParams(-1, -2)) }
+        val names = row()
+        repeat(7) { i ->
+            names.addView(context.label(firstDay.plus(i.toLong()).getDisplayName(TextStyle.NARROW, Locale.ENGLISH), 11f, SOFT).apply {
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        var week = row()
+        repeat((month.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7) {
+            week.addView(View(context), LinearLayout.LayoutParams(0, context.dp(40), 1f))
+        }
+        for (date in 1..month.lengthOfMonth()) {
+            val day = month.atDay(date)
+            if (day.dayOfWeek == firstDay && date > 1) week = row()
+            val cell = FrameLayout(context)
+            if (day <= today) cell.addView(PillarsView(context, days[day] ?: DayPractice.NONE), FrameLayout.LayoutParams(context.dp(32), context.dp(32), Gravity.CENTER))
+            cell.addView(context.label("$date", 9.5f, if (day == today) INK else SOFT, bold = day == today).apply {
+                gravity = Gravity.CENTER
+            }, FrameLayout.LayoutParams(-1, -1))
+            week.addView(cell, LinearLayout.LayoutParams(0, context.dp(40), 1f))
+        }
+        while (week.childCount < 7) week.addView(View(context), LinearLayout.LayoutParams(0, context.dp(40), 1f))
+        body.addView(grid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(10) })
+        val counts = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            Pillar.entries.forEach { pillar ->
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    val reached = days.values.count { it.done(pillar) }
+                    addView(context.label("$reached", 20f, pillar.color, serif = true))
+                    addView(context.label("${pillar.label} ${if (reached == 1) "day" else "days"}", 12f, SOFT))
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+        }
+        body.addView(counts, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(14) })
+        card.addView(body)
     }
 
     /** Tap to choose on the wheel. Hold to set it with one drag and start on letting go. */

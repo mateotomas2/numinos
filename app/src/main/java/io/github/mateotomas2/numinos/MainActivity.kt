@@ -271,6 +271,20 @@ class MainActivity : Activity() {
         heading("During a sit")
         toggle("Let the screen sleep", store.sitScreenSleeps) { store.sitScreenSleeps = it }
 
+        heading("Your practice")
+        content.addView(body("Minutes a day for each. A day starts at 4:00."))
+        listOf(Pillar.MIND to "Mind · reading", Pillar.BODY to "Body · videos", Pillar.SOUL to "Soul · meditation").forEach { (pillar, title) ->
+            slider(title, store.dailyMinutes(pillar), 1, 60, { "$it min" }) {
+                store.setDailyMinutes(pillar, it)
+                OverlayService.refresh(this)
+            }
+        }
+        content.addView(label("Delete practice history", 14f, ACCENT, bold = true).apply {
+            minHeight = dp(44)
+            gravity = Gravity.CENTER_VERTICAL
+            tappable(::confirmClearPractice)
+        })
+
         heading("Permissions")
         addSetupSteps()
 
@@ -311,6 +325,18 @@ class MainActivity : Activity() {
         value < 0 -> "$value dp, tucked behind the edge"
         value == 0 -> "Touching the edge"
         else -> "+$value dp, away from the edge"
+    }
+
+    private fun confirmClearPractice() {
+        dialogBuilder()
+            .setTitle("Delete practice history?")
+            .setMessage("This erases every day's Mind, Body and Soul. It can't be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                store.clearPractice()
+                OverlayService.refresh(this)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun confirmReset() {

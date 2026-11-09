@@ -248,6 +248,9 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
     /** When set, the symbol is drawn this size at [markX], vertically centered, in a larger touch area. */
     var markSize = 0
     var markX = 0
+    /** The day's pillars, drawn as a half ring just outside the mark, on the side facing into the screen. */
+    var practice: DayPractice? = null
+    var practiceOnLeft = false
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val path = Path()
     private val box = RectF()
@@ -257,6 +260,25 @@ class SymbolView(context: Context, symbol: Symbol) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        canvas.save()
+        drawMark(canvas)
+        canvas.restore()
+        drawPractice(canvas)
+    }
+
+    private fun drawPractice(canvas: Canvas) {
+        val day = practice ?: return
+        if (markSize <= 0) return
+        val density = resources.displayMetrics.density
+        val stroke = 2.5f * density
+        val radius = markSize / 2f + 2.5f * density + stroke / 2
+        val cx = markX + markSize / 2f
+        val cy = height / 2f
+        box.set(cx - radius, cy - radius, cx + radius, cy + radius)
+        drawPillars(canvas, paint, box, day, if (practiceOnLeft) -180f else 180f, stroke, 0x66808080)
+    }
+
+    private fun drawMark(canvas: Canvas) {
         val size = if (markSize > 0) markSize else min(width, height)
         if (markSize > 0) canvas.translate(markX.toFloat(), (height - size) / 2f)
         val c = size / 2f

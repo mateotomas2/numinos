@@ -147,7 +147,10 @@ class OverlayService : Service() {
     // Floating symbol
 
     /** The window you touch. It never gets too small to hit, however small the mark inside it is. */
-    private fun bubbleSize() = maxOf(dp(store.bubbleSizeDp) + maxOf(dp(store.bubbleOffsetDp), 0), dp(MIN_TOUCH_DP))
+    private fun bubbleSize(): Int {
+        val mark = dp(store.bubbleSizeDp)
+        return maxOf(mark + maxOf(dp(store.bubbleOffsetDp), 0) + dp(ARC_DP), mark + dp(ARC_DP) * 2, dp(MIN_TOUCH_DP))
+    }
 
     private fun hiddenForFullScreen() = store.bubbleHidesInFullScreen && appIsFullScreen
 
@@ -157,6 +160,8 @@ class OverlayService : Service() {
         val offset = maxOf(dp(store.bubbleOffsetDp), -size * 3 / 5)
         view.markSize = size
         view.markX = if (store.bubbleOnLeft) offset else bubbleSize() - size - offset
+        view.practice = store.practice(practiceDay(System.currentTimeMillis()))
+        view.practiceOnLeft = !store.bubbleOnLeft
         view.invalidate()
     }
 
@@ -197,10 +202,28 @@ class OverlayService : Service() {
     private fun onFullScreenChanged(hidden: Boolean) {
         if (appIsFullScreen == hidden) return
         appIsFullScreen = hidden
+        trackVideo(hidden)
         if (hiddenForFullScreen()) {
             removeBubble()
         } else if (meditation == null && panel == null && !readerOpen && !AltarActivity.isOpen) {
             showBubble()
+        }
+    }
+
+    /**
+     * A video counts from opening it until the status bar comes back, which is when you leave the
+     * player. A player that never hides the bar can't be measured, so that video stays at 0.
+     */
+    private fun trackVideo(hidden: Boolean) {
+        val openedAt = store.videoOpenedAt ?: return
+        val seconds = (System.currentTimeMillis() - openedAt) / 1000
+        when {
+            hidden && seconds <= PLAYER_WAIT_SECONDS -> store.videoFullScreen = true
+            hidden -> store.videoOpenedAt = null
+            store.videoFullScreen -> {
+                if (seconds <= MAX_VIDEO_SECONDS) store.setPracticeSeconds(Pillar.BODY, openedAt, seconds)
+                store.videoOpenedAt = null
+            }
         }
     }
 
@@ -383,6 +406,12 @@ class OverlayService : Service() {
     companion object {
         private const val CHANNEL = "presence"
         private const val MIN_TOUCH_DP = 48
+        /** How long a player has to hide the status bar before we stop waiting for it. */
+        private const val PLAYER_WAIT_SECONDS = 60L
+        /** Longer than this, the bar most likely came back for another reason much later. */
+        private const val MAX_VIDEO_SECONDS = 3 * 60 * 60L
+        /** Room around the mark for the half ring of the day's pillars. */
+        private const val ARC_DP = 7
         private const val NOTIFICATION = 1
         private const val ACTION_HIDE = "hide"
         private const val ACTION_END = "end"

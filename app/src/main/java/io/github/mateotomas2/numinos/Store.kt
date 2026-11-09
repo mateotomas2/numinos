@@ -6,9 +6,11 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.time.LocalDate
 import java.util.UUID
 
 const val SOURCE_MINE = "mine"
+private const val DEFAULT_DAILY_MINUTES = 10
 const val SOURCE_JAR = "jar"
 const val MINE_TITLE = "My sentences"
 const val DARK_MODE_SYSTEM = "system"
@@ -57,6 +59,10 @@ data class Video(val id: String, val title: String, val category: String, val la
 class Store private constructor(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("numinos", Context.MODE_PRIVATE)
+
+    /** The video being watched, kept in memory: when it opened and whether its player has hidden the status bar yet. */
+    var videoOpenedAt: Long? = null
+    var videoFullScreen = false
 
     init {
         applyLook()
@@ -190,6 +196,23 @@ class Store private constructor(context: Context) {
         items.put(JSONObject().put("id", id).put("text", text.trim()))
         prefs.edit().putString("mine", items.toString()).apply()
         return Sentence("$SOURCE_MINE:$id", text.trim(), MINE_TITLE, "")
+    }
+
+    /** Changes one of your sentences, and the copies kept as the fixed sentence or in the jar. */
+    @Synchronized
+    fun editMine(key: String, text: String): Sentence {
+        val items = JSONArray(prefs.getString("mine", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if ("$SOURCE_MINE:${item.getString("id")}" == key) item.put("text", text.trim())
+        }
+        prefs.edit().putString("mine", items.toString()).apply()
+        val edited = Sentence(key, text.trim(), MINE_TITLE, "")
+        if (pinned()?.key == key) setPinned(edited)
+        val jar = JSONArray()
+        liked().forEach { jar.put((if (it.key == key) edited else it).toJson()) }
+        prefs.edit().putString("jar", jar.toString()).apply()
+        return edited
     }
 
     @Synchronized
@@ -350,6 +373,53 @@ class Store private constructor(context: Context) {
     var sitScreenSleeps: Boolean
         get() = prefs.getBoolean("sitScreenSleeps", false)
         set(value) = prefs.edit().putBoolean("sitScreenSleeps", value).apply()
+
+    // Practice: each entry is a pillar, when it started and how many seconds it lasted.
+
+    @Synchronized
+    fun recordPractice(pillar: Pillar, startedAt: Long, seconds: Long) {
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        items.put(JSONObject().put("p", pillar.name).put("t", startedAt).put("s", seconds))
+        prefs.edit().putString("practice", items.toString()).apply()
+    }
+
+    /** Fills in the length of a session recorded when it began, such as a video. */
+    @Synchronized
+    fun setPracticeSeconds(pillar: Pillar, startedAt: Long, seconds: Long) {
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            if (item.getString("p") == pillar.name && item.getLong("t") == startedAt) item.put("s", seconds)
+        }
+        prefs.edit().putString("practice", items.toString()).apply()
+    }
+
+    fun practice(day: LocalDate): DayPractice =
+        practiceDays(day, day)[day] ?: DayPractice(emptyMap(), Pillar.entries.associateWith(::dailyMinutes))
+
+    /** What each day from [first] to [last] reached. Days with nothing at all are left out. */
+    fun practiceDays(first: LocalDate, last: LocalDate): Map<LocalDate, DayPractice> {
+        val seconds = mutableMapOf<Pair<LocalDate, String>, Long>()
+        val items = JSONArray(prefs.getString("practice", "[]"))
+        for (i in 0 until items.length()) {
+            val item = items.getJSONObject(i)
+            val day = practiceDay(item.getLong("t"))
+            if (day < first || day > last) continue
+            val key = day to item.getString("p")
+            seconds[key] = (seconds[key] ?: 0) + item.getLong("s")
+        }
+        val goals = Pillar.entries.associateWith(::dailyMinutes)
+        return seconds.keys.map { it.first }.toSet().associateWith { day ->
+            DayPractice(Pillar.entries.associateWith { ((seconds[day to it.name] ?: 0) / 60).toInt() }, goals)
+        }
+    }
+
+    fun clearPractice() = prefs.edit().remove("practice").apply()
+
+    /** The minutes a day that complete a pillar. */
+    fun dailyMinutes(pillar: Pillar) = prefs.getInt("minutes${pillar.name}", DEFAULT_DAILY_MINUTES)
+
+    fun setDailyMinutes(pillar: Pillar, minutes: Int) = prefs.edit().putInt("minutes${pillar.name}", minutes).apply()
 
     var minutes: Int
         get() = prefs.getInt("minutes", 10)
