@@ -60,6 +60,10 @@ class Store private constructor(context: Context) {
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("numinos", Context.MODE_PRIVATE)
 
+    /** The video being watched, kept in memory: when it opened and whether its player has hidden the status bar yet. */
+    var videoOpenedAt: Long? = null
+    var videoFullScreen = false
+
     init {
         applyLook()
     }

@@ -44,13 +44,6 @@
 
         <activity android:name=".AltarActivity" android:exported="false" />
 
-        <activity
-            android:name=".VideoActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:taskAffinity=""
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".BookImportActivity"

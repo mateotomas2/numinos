@@ -635,7 +635,12 @@ class Panel(
             tag = video.id
             if (arranging == null) {
                 tappable {
-                    VideoActivity.open(context, video.id)
+                    if (YouTube.open(context, video.id)) {
+                        val now = System.currentTimeMillis()
+                        store.recordPractice(Pillar.BODY, now, 0)
+                        store.videoOpenedAt = now
+                        store.videoFullScreen = false
+                    }
                     close()
                 }
                 setOnLongClickListener {
